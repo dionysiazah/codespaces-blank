@@ -1,0 +1,1599 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="theme-color" content="#070b11" />
+    <title>Earth | Three.js</title>
+    <style>
+      :root {
+        color-scheme: dark;
+        --panel-width: clamp(320px, 40vw, 460px);
+        --line: rgba(192, 214, 224, 0.15);
+        --muted: #91a2ad;
+        --ink: #eef4f7;
+        --accent: #9ed5ce;
+      }
+      * { box-sizing: border-box; }
+      html, body { width: 100%; height: 100%; margin: 0; overflow: hidden; background: #070b11; color: var(--ink); font-family: system-ui, sans-serif; }
+      #scene-viewport { position: fixed; inset: 0 auto 0 0; width: 100%; overflow: hidden; background: #070b11; transition: width 650ms cubic-bezier(.2,.8,.2,1); }
+      #scene-viewport canvas { display: block; width: 100%; height: 100%; }
+      body.search-open #scene-viewport { width: calc(100% - var(--panel-width)); }
+      .loading {
+        position: fixed;
+        inset: 0;
+        display: grid;
+        place-items: center;
+        color: #a9c2c9;
+        font: 11px/1.4 ui-monospace, monospace;
+        letter-spacing: 0.12em;
+        text-transform: uppercase;
+        pointer-events: none;
+      }
+      .loading[hidden] { display: none; }
+      .country-tooltip {
+        position: fixed;
+        z-index: 4;
+        min-width: 132px;
+        max-width: 220px;
+        padding: 9px 12px 10px;
+        border: 1px solid rgba(185, 216, 255, 0.3);
+        border-radius: 4px;
+        background: rgba(8, 15, 23, 0.94);
+        box-shadow: 0 8px 26px rgba(0, 0, 0, 0.28);
+        color: #f5f8ff;
+        pointer-events: none;
+      }
+      .country-tooltip[hidden] { display: none; }
+      .country-tooltip-label {
+        display: block;
+        margin-bottom: 4px;
+        color: #a9c2c9;
+        font: 9px/1.2 ui-monospace, monospace;
+        letter-spacing: 0.08em;
+        text-transform: uppercase;
+      }
+      .country-tooltip-name {
+        display: block;
+        font: 600 13px/1.3 system-ui, sans-serif;
+      }
+      .city-label-layer {
+        position: absolute;
+        inset: 0;
+        z-index: 2;
+        overflow: hidden;
+        pointer-events: none;
+        transition: width 650ms cubic-bezier(.2,.8,.2,1);
+      }
+      .city-leaders {
+        position: absolute;
+        inset: 0;
+        width: 100%;
+        height: 100%;
+        overflow: visible;
+      }
+      .city-leader {
+        stroke: rgba(255, 212, 138, 0.72);
+        stroke-width: 1;
+      }
+      .city-label {
+        position: absolute;
+        padding: 4px 7px;
+        border: 1px solid rgba(255, 212, 138, 0.32);
+        border-radius: 3px;
+        background: rgba(7, 13, 20, 0.88);
+        color: #fff;
+        font: 600 10px/1.2 system-ui, sans-serif;
+        white-space: nowrap;
+        visibility: hidden;
+        opacity: 1;
+        pointer-events: none;
+      }
+      .search-dock {
+        position: fixed;
+        z-index: 7;
+        top: 22px;
+        right: 22px;
+        display: flex;
+        width: min(570px, calc(100vw - 44px));
+        gap: 7px;
+        padding: 7px;
+        border: 1px solid var(--line);
+        border-radius: 6px;
+        background: rgba(9, 16, 23, 0.94);
+        box-shadow: 0 14px 40px rgba(0, 0, 0, 0.32);
+        backdrop-filter: blur(18px);
+      }
+      .search-input {
+        min-width: 0;
+        flex: 1;
+        height: 40px;
+        padding: 0 12px;
+        border: 1px solid transparent;
+        border-radius: 3px;
+        outline: none;
+        background: rgba(255, 255, 255, 0.045);
+        color: var(--ink);
+        font: 13px system-ui, sans-serif;
+      }
+      .search-input::placeholder { color: #82919a; }
+      .search-input:focus { border-color: rgba(158, 213, 206, 0.65); }
+      .search-button {
+        height: 40px;
+        padding: 0 16px;
+        border: 1px solid rgba(158, 213, 206, 0.38);
+        border-radius: 3px;
+        background: #a4d8cf;
+        color: #0b171a;
+        font: 650 12px system-ui, sans-serif;
+        cursor: pointer;
+      }
+      .search-button:disabled { opacity: 0.65; cursor: progress; }
+      .random-button {
+        flex: 0 0 auto;
+        height: 40px;
+        padding: 0 12px;
+        border: 1px solid rgba(192, 214, 224, 0.2);
+        border-radius: 3px;
+        background: rgba(255,255,255,.055);
+        color: var(--ink);
+        font: 550 11px system-ui, sans-serif;
+        white-space: nowrap;
+        cursor: pointer;
+      }
+      .random-button:hover { border-color: var(--accent); color: var(--accent); }
+      .random-button:disabled { opacity: .6; cursor: progress; }
+      .info-panel {
+        position: fixed;
+        z-index: 5;
+        inset: 0 0 0 auto;
+        width: var(--panel-width);
+        overflow: auto;
+        border-left: 1px solid var(--line);
+        background: rgba(10, 17, 24, 0.98);
+        box-shadow: -24px 0 70px rgba(0, 0, 0, 0.24);
+        transform: translateX(102%);
+        visibility: hidden;
+        transition: transform 650ms cubic-bezier(.2,.8,.2,1), visibility 0s linear 650ms;
+      }
+      body.search-open .info-panel { transform: translateX(0); visibility: visible; transition-delay: 0s; }
+      .panel-content { padding: 94px 26px 30px; }
+      .panel-kicker { color: var(--accent); font: 10px ui-monospace, monospace; letter-spacing: 0.09em; text-transform: uppercase; }
+      .panel-title { margin: 10px 0 7px; font-size: clamp(26px, 3vw, 38px); font-weight: 550; line-height: 1.08; }
+      .panel-subtitle { margin: 0; color: #b6c3cb; font-size: 13px; line-height: 1.55; }
+      .panel-rule { height: 1px; margin: 22px 0; border: 0; background: var(--line); }
+      .detail-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 14px 10px; }
+      .detail-label { display: block; margin-bottom: 5px; color: var(--muted); font: 9px ui-monospace, monospace; letter-spacing: 0.06em; text-transform: uppercase; }
+      .detail-value { color: #e4edf0; font-size: 12px; line-height: 1.45; }
+      .detail-grid[hidden] { display: none; }
+      .facts-heading { margin: 22px 0 11px; font-size: 14px; font-weight: 550; }
+      .detail-grid { display: grid; grid-template-columns: 1fr; gap: 0; border-top: 1px solid var(--line); }
+      .detail-row { display: grid; grid-template-columns: minmax(112px, 0.8fr) 1.2fr; gap: 12px; padding: 11px 0; border-bottom: 1px solid var(--line); }
+      .panel-status { color: var(--muted); font-size: 12px; line-height: 1.5; }
+      .places-heading { display: flex; align-items: baseline; justify-content: space-between; margin: 18px 0 11px; }
+      .places-heading h2, .saved-heading { margin: 0; font-size: 14px; font-weight: 550; }
+      .places-city { color: var(--muted); font: 9px ui-monospace, monospace; text-transform: uppercase; }
+      .polaroid { padding: 9px 9px 13px; border-radius: 4px; background: #e9e7dc; color: #172229; box-shadow: 0 12px 30px rgba(0,0,0,.24); transform: rotate(-1deg); transition: transform 280ms ease; }
+      .polaroid:hover { transform: rotate(0deg) translateY(-2px); }
+      .polaroid-image { position: relative; overflow: hidden; aspect-ratio: 1.18; background: #16232b; }
+      .polaroid-image img { display: block; width: 100%; height: 100%; object-fit: cover; }
+      .polaroid-photo-empty { display: grid; width: 100%; height: 100%; padding: 18px; place-items: center; background: linear-gradient(145deg, #1d3038, #101a20); color: #b6c8ce; font: 10px/1.5 ui-monospace, monospace; text-align: center; }
+      .polaroid-photo-empty[hidden] { display: none; }
+      .polaroid-copy { padding: 11px 5px 5px; }
+      .place-category { color: #65777a; font: 9px ui-monospace, monospace; letter-spacing: .06em; text-transform: uppercase; }
+      .place-name { margin: 4px 0 3px; font: 600 18px/1.2 system-ui, sans-serif; }
+      .place-note { margin: 0; color: #46575a; font-size: 11px; line-height: 1.4; }
+      .place-actions { display: flex; justify-content: center; gap: 14px; margin: 14px 0 18px; }
+      .place-action { display: grid; width: 44px; height: 44px; place-items: center; border: 1px solid var(--line); border-radius: 50%; background: rgba(255,255,255,.035); color: var(--ink); font-size: 21px; cursor: pointer; transition: transform 160ms ease, border-color 160ms ease, background 160ms ease; }
+      .place-action:hover { transform: translateY(-2px); }
+      .place-action[data-decision="liked"] { color: #ff9a9a; }
+      .place-action[data-decision="disliked"] { color: #a9c2c9; }
+      .place-action:disabled { opacity: .38; cursor: default; transform: none; }
+      .polaroid .place-actions { margin: 10px 0 0; }
+      .polaroid .place-action { border-color: rgba(23,34,41,.18); background: rgba(23,34,41,.04); color: #27383b; }
+      .polaroid .place-action[data-decision="liked"] { color: #bf4c58; }
+      .polaroid .place-action[data-decision="disliked"] { color: #526a76; }
+      .place-empty { padding: 17px 14px; border: 1px dashed var(--line); border-radius: 4px; color: var(--muted); font-size: 12px; line-height: 1.5; }
+      .saved-section { padding-top: 15px; border-top: 1px solid var(--line); }
+      .saved-groups { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; margin-top: 12px; }
+      .saved-group-title { display: flex; justify-content: space-between; margin-bottom: 7px; color: var(--muted); font: 9px ui-monospace, monospace; text-transform: uppercase; }
+      .saved-list { display: flex; flex-wrap: wrap; gap: 5px; min-height: 22px; }
+      .saved-place { padding: 4px 6px; border: 1px solid var(--line); border-radius: 3px; color: #dce5e8; font-size: 10px; }
+      .saved-none { color: #7f9098; font-size: 10px; }
+      @media (max-width: 720px) {
+        :root { --panel-width: 100vw; }
+        body.search-open #scene-viewport { width: 100%; }
+        .info-panel { inset: auto 0 0; width: 100%; height: min(62vh, 570px); border: 1px solid var(--line); border-bottom: 0; border-radius: 10px 10px 0 0; transform: translateY(102%); }
+        body.search-open .info-panel { transform: translateY(0); }
+        .panel-content { padding: 82px 20px 24px; }
+        .search-dock { top: 14px; right: 14px; width: calc(100vw - 28px); gap: 5px; }
+        .random-button { padding: 0 8px; font-size: 10px; }
+        .search-input { padding: 0 8px; font-size: 12px; }
+      }
+    </style>
+  </head>
+  <body>
+    <div id="scene-viewport">
+      <div class="loading" id="loading">Loading Earth</div>
+      <div class="country-tooltip" id="country-tooltip" role="status" aria-live="polite" hidden>
+        <span class="country-tooltip-label" id="country-tooltip-label"></span>
+        <strong class="country-tooltip-name" id="country-tooltip-name"></strong>
+      </div>
+      <div class="city-label-layer" id="city-label-layer" aria-hidden="true">
+        <svg class="city-leaders" id="city-leaders"></svg>
+      </div>
+    </div>
+    <form class="search-dock" id="location-search-form" role="search">
+      <input class="search-input" id="location-search" type="search" placeholder="Search a city or country" aria-label="Search a city or country" autocomplete="off" />
+      <button class="search-button" id="location-search-button" type="submit">Explore</button>
+      <button class="random-button" id="random-destination" type="button">🎲 Random Destination</button>
+    </form>
+    <aside class="info-panel" id="info-panel" aria-live="polite" aria-label="Location information">
+      <div class="panel-content">
+        <div class="panel-kicker" id="panel-kicker">Location guide</div>
+        <h1 class="panel-title" id="panel-title">Explore the world</h1>
+        <p class="panel-subtitle" id="panel-subtitle">Search for a place to focus the globe and see local highlights.</p>
+        <section class="city-places" id="city-places" hidden aria-label="City recommendations">
+          <div class="places-heading"><h2>Polaroid picks</h2><span class="places-city" id="places-city"></span></div>
+          <div class="polaroid-slot" id="polaroid-slot"></div>
+          <div class="saved-section">
+            <h2 class="saved-heading">Saved for <span id="saved-city-name">this city</span></h2>
+            <div class="saved-groups">
+              <div><div class="saved-group-title">Liked <span id="liked-count">0</span></div><div class="saved-list" id="liked-places"></div></div>
+              <div><div class="saved-group-title">Passed <span id="disliked-count">0</span></div><div class="saved-list" id="disliked-places"></div></div>
+            </div>
+          </div>
+        </section>
+        <h2 class="facts-heading">Useful information · Χρήσιμες πληροφορίες</h2>
+        <div class="detail-grid" id="location-details" hidden></div>
+      </div>
+    </aside>
+    <script type="module">
+      import * as THREE from "https://esm.sh/three@0.180.0";
+      import { OrbitControls } from "https://esm.sh/three@0.180.0/examples/jsm/controls/OrbitControls.js";
+      import { geoCentroid } from "https://esm.sh/d3-geo@3.1.1";
+      import { csvParse } from "https://esm.sh/d3-dsv@3.0.1";
+
+      const scene = new THREE.Scene();
+      scene.background = new THREE.Color("#070b11");
+
+      const sceneViewport = document.querySelector("#scene-viewport");
+      const camera = new THREE.PerspectiveCamera(42, sceneViewport.clientWidth / innerHeight, 0.1, 500);
+      camera.position.set(0, 0, 4);
+
+      const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: false });
+      renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
+      renderer.setSize(sceneViewport.clientWidth, sceneViewport.clientHeight);
+      renderer.outputColorSpace = THREE.SRGBColorSpace;
+      renderer.toneMapping = THREE.ACESFilmicToneMapping;
+      renderer.toneMappingExposure = 1.15;
+      sceneViewport.insertBefore(renderer.domElement, sceneViewport.firstChild);
+
+      scene.add(new THREE.AmbientLight(0xffffff, 1.35));
+      const sunlight = new THREE.DirectionalLight(0xfff1dc, 2.8);
+      sunlight.position.set(-4, 2.5, 5);
+      scene.add(sunlight);
+
+      const earthRadius = 1.9;
+      const earthMaterial = new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.92 });
+      const earth = new THREE.Mesh(new THREE.SphereGeometry(earthRadius, 96, 64), earthMaterial);
+      scene.add(earth);
+      const cityMarkers = new THREE.Group();
+      earth.add(cityMarkers);
+      const cityMarkerGeometry = new THREE.SphereGeometry(0.035, 12, 8);
+      const cityHaloGeometry = new THREE.SphereGeometry(0.075, 12, 8);
+      const cityMarkerMaterial = new THREE.MeshBasicMaterial({ color: 0xffd48a });
+      const cityHaloMaterial = new THREE.MeshBasicMaterial({ color: 0xffc867, transparent: true, opacity: 0.32, depthWrite: false });
+      const cityLabelLayer = document.querySelector("#city-label-layer");
+      const cityLeaders = document.querySelector("#city-leaders");
+      const cityLabelEntries = [];
+
+      const solarPlaneZ = -28;
+      const sunPosition = new THREE.Vector3(-30, 0, solarPlaneZ);
+      const fullOrbit = Math.PI * 2;
+      const solarSystemDetails = new THREE.Group();
+      scene.add(solarSystemDetails);
+
+      function createOrbit(radius, opacity = 0.4) {
+        const curve = new THREE.EllipseCurve(
+          sunPosition.x, sunPosition.y,
+          radius, radius,
+          0, fullOrbit,
+          false,
+          0
+        );
+        const points = curve.getPoints(512).map(({ x, y }) => new THREE.Vector3(x, y, solarPlaneZ));
+        const geometry = new THREE.BufferGeometry().setFromPoints(points);
+        const material = new THREE.LineBasicMaterial({
+          color: 0x9ab8c5,
+          transparent: true,
+          opacity,
+          depthWrite: false,
+        });
+        solarSystemDetails.add(new THREE.LineLoop(geometry, material));
+        return curve;
+      }
+
+      const earthOrbit = createOrbit(30, 0.58);
+      const earthSpeed = 0.012;
+      earth.position.set(0, 0, solarPlaneZ);
+
+      const controls = new OrbitControls(camera, renderer.domElement);
+      controls.target.copy(earth.position);
+      controls.enableDamping = true;
+      controls.dampingFactor = 0.05;
+      controls.enablePan = false;
+      controls.minDistance = 3.5;
+      controls.maxDistance = 48;
+      controls.update();
+
+      const starCount = 12000;
+      const starGeometry = new THREE.BufferGeometry();
+      const starPositions = new Float32Array(starCount * 3);
+      const starColors = new Float32Array(starCount * 3);
+      const starSizes = new Float32Array(starCount);
+      const starBrightness = new Float32Array(starCount);
+      const starPhases = new Float32Array(starCount);
+      const starTwinkleRates = new Float32Array(starCount);
+      const paleBlue = new THREE.Color("#b9d8ff");
+      const softWhite = new THREE.Color("#f5f8ff");
+
+      for (let index = 0; index < starCount; index += 1) {
+        const azimuth = Math.random() * Math.PI * 2;
+        const vertical = Math.random() * 2 - 1;
+        const horizontal = Math.sqrt(1 - vertical * vertical);
+        const distance = 180 + Math.random() * 120;
+        const offset = index * 3;
+        starPositions[offset] = distance * horizontal * Math.cos(azimuth);
+        starPositions[offset + 1] = distance * vertical;
+        starPositions[offset + 2] = distance * horizontal * Math.sin(azimuth);
+
+        const color = Math.random() < 0.28 ? paleBlue : softWhite;
+        starColors[offset] = color.r;
+        starColors[offset + 1] = color.g;
+        starColors[offset + 2] = color.b;
+        starSizes[index] = 1.2 + Math.random() * 1.7;
+        starBrightness[index] = 0.3 + Math.random() * 0.7;
+        starPhases[index] = Math.random() * Math.PI * 2;
+        starTwinkleRates[index] = 0.35 + Math.random() * 1.5;
+      }
+
+      starGeometry.setAttribute("position", new THREE.BufferAttribute(starPositions, 3));
+      starGeometry.setAttribute("aStarColor", new THREE.BufferAttribute(starColors, 3));
+      starGeometry.setAttribute("aSize", new THREE.BufferAttribute(starSizes, 1));
+      starGeometry.setAttribute("aBrightness", new THREE.BufferAttribute(starBrightness, 1));
+      starGeometry.setAttribute("aPhase", new THREE.BufferAttribute(starPhases, 1));
+      starGeometry.setAttribute("aTwinkleRate", new THREE.BufferAttribute(starTwinkleRates, 1));
+
+      const starMaterial = new THREE.ShaderMaterial({
+        uniforms: { uTime: { value: 0 } },
+        vertexShader: `
+          attribute vec3 aStarColor;
+          attribute float aSize;
+          attribute float aBrightness;
+          attribute float aPhase;
+          attribute float aTwinkleRate;
+          uniform float uTime;
+          varying vec3 vStarColor;
+          varying float vBrightness;
+
+          void main() {
+            vec4 viewPosition = modelViewMatrix * vec4(position, 1.0);
+            float twinkle = 0.9 + 0.1 * sin(uTime * aTwinkleRate + aPhase);
+            vStarColor = aStarColor;
+            vBrightness = aBrightness * twinkle;
+            gl_PointSize = aSize * (240.0 / max(-viewPosition.z, 1.0));
+            gl_Position = projectionMatrix * viewPosition;
+          }
+        `,
+        fragmentShader: `
+          varying vec3 vStarColor;
+          varying float vBrightness;
+
+          void main() {
+            float distanceFromCenter = length(gl_PointCoord - vec2(0.5));
+            float alpha = 1.0 - smoothstep(0.2, 0.5, distanceFromCenter);
+            gl_FragColor = vec4(vStarColor * vBrightness, alpha * vBrightness);
+          }
+        `,
+        transparent: true,
+        depthWrite: false,
+        blending: THREE.AdditiveBlending,
+      });
+      const starfield = new THREE.Points(starGeometry, starMaterial);
+      starfield.frustumCulled = false;
+      scene.add(starfield);
+
+      const loading = document.querySelector("#loading");
+      const textureLoader = new THREE.TextureLoader();
+      textureLoader.load(
+        "https://threejs.org/examples/textures/planets/earth_atmos_2048.jpg",
+        (texture) => {
+          texture.colorSpace = THREE.SRGBColorSpace;
+          texture.anisotropy = renderer.capabilities.getMaxAnisotropy();
+          earthMaterial.map = texture;
+          earthMaterial.needsUpdate = true;
+          loading.hidden = true;
+        },
+        undefined,
+        () => { loading.textContent = "Earth texture could not be loaded"; }
+      );
+
+      let countryFeatures = [];
+      let countryDataReady = false;
+      let cityFeatures = [];
+      let cityDataReady = false;
+      let activeCityCountry = null;
+      const countryDataPromise = fetch("https://cdn.jsdelivr.net/gh/nvkelso/natural-earth-vector@master/geojson/ne_110m_admin_0_countries.geojson")
+        .then((response) => {
+          if (!response.ok) throw new Error("Country boundary data unavailable");
+          return response.json();
+        })
+        .then((geojson) => {
+          countryFeatures = geojson.features;
+          countryDataReady = true;
+        })
+        .catch((error) => console.error("Could not load country boundaries:", error));
+
+      fetch("https://cdn.jsdelivr.net/gh/nvkelso/natural-earth-vector@master/geojson/ne_110m_populated_places.geojson")
+        .then((response) => {
+          if (!response.ok) throw new Error("City data unavailable");
+          return response.json();
+        })
+        .then((geojson) => {
+          cityFeatures = geojson.features;
+          cityDataReady = true;
+          if (activeCityCountry) showMajorCities(activeCityCountry);
+        })
+        .catch((error) => console.error("Could not load city data:", error));
+
+      function ringContainsPoint(longitude, latitude, ring) {
+        const unwrappedRing = [[ring[0][0], ring[0][1]]];
+        let previousLongitude = ring[0][0];
+        let continuousLongitude = previousLongitude;
+        let crossesAntimeridian = false;
+
+        for (let index = 1; index < ring.length; index += 1) {
+          let longitudeDelta = ring[index][0] - previousLongitude;
+          if (longitudeDelta > 180) {
+            longitudeDelta -= 360;
+            crossesAntimeridian = true;
+          } else if (longitudeDelta < -180) {
+            longitudeDelta += 360;
+            crossesAntimeridian = true;
+          }
+          continuousLongitude += longitudeDelta;
+          unwrappedRing.push([continuousLongitude, ring[index][1]]);
+          previousLongitude = ring[index][0];
+        }
+
+        const points = crossesAntimeridian ? unwrappedRing : ring;
+        if (crossesAntimeridian) {
+          const longitudes = points.map((point) => point[0]);
+          const ringCenter = (Math.min(...longitudes) + Math.max(...longitudes)) / 2;
+          longitude += 360 * Math.round((ringCenter - longitude) / 360);
+        }
+
+        let inside = false;
+        for (let index = 0, previous = points.length - 1; index < points.length; previous = index, index += 1) {
+          const currentPoint = points[index];
+          const previousPoint = points[previous];
+          const currentLatitude = currentPoint[1];
+          const previousLatitude = previousPoint[1];
+          const crossesLatitude = (currentLatitude > latitude) !== (previousLatitude > latitude);
+          const crossingLongitude = ((previousPoint[0] - currentPoint[0]) * (latitude - currentLatitude)) /
+            (previousLatitude - currentLatitude) + currentPoint[0];
+
+          if (crossesLatitude && longitude < crossingLongitude) inside = !inside;
+        }
+        return inside;
+      }
+
+      function findCountry(longitude, latitude) {
+        for (const country of countryFeatures) {
+          const geometry = country.geometry;
+          if (!geometry) continue;
+          const polygons = geometry.type === "Polygon" ? [geometry.coordinates] : geometry.coordinates;
+
+          for (const polygon of polygons) {
+            if (!ringContainsPoint(longitude, latitude, polygon[0])) continue;
+            if (polygon.slice(1).some((hole) => ringContainsPoint(longitude, latitude, hole))) continue;
+            return country;
+          }
+        }
+        return null;
+      }
+
+      function countryAtUV(uv) {
+        const longitude = THREE.MathUtils.euclideanModulo((uv.x - 0.5) * 360 + 180, 360) - 180;
+        const latitude = (uv.y - 0.5) * 180;
+        return findCountry(longitude, latitude);
+      }
+
+      function geographicPoint(longitude, latitude, radius) {
+        const lon = THREE.MathUtils.degToRad(longitude);
+        const lat = THREE.MathUtils.degToRad(latitude);
+        const cosLatitude = Math.cos(lat);
+        return new THREE.Vector3(
+          radius * cosLatitude * Math.cos(lon),
+          radius * Math.sin(lat),
+          -radius * cosLatitude * Math.sin(lon)
+        );
+      }
+
+      function clearCityMarkers() {
+        cityMarkers.clear();
+        for (const entry of cityLabelEntries) entry.element.remove();
+        cityLabelEntries.length = 0;
+        cityLeaders.replaceChildren();
+      }
+
+      function addCityMarker(name, latitude, longitude) {
+        const surfaceDirection = geographicPoint(longitude, latitude, 1).normalize();
+        const localPosition = surfaceDirection.clone().multiplyScalar(earthRadius + 0.025);
+        const marker = new THREE.Group();
+        marker.position.copy(localPosition);
+        marker.add(new THREE.Mesh(cityHaloGeometry, cityHaloMaterial));
+        marker.add(new THREE.Mesh(cityMarkerGeometry, cityMarkerMaterial));
+        cityMarkers.add(marker);
+
+        const label = document.createElement("div");
+        label.className = "city-label";
+        label.textContent = name;
+        cityLabelLayer.append(label);
+
+        const leader = document.createElementNS("http://www.w3.org/2000/svg", "line");
+        leader.setAttribute("class", "city-leader");
+        cityLeaders.append(leader);
+        cityLabelEntries.push({ localPosition, element: label, leader });
+      }
+
+      function showMajorCities(country) {
+        activeCityCountry = country;
+        clearCityMarkers();
+        const countryCode = country.properties.ADM0_A3;
+        const naturalEarthCities = cityDataReady
+          ? cityFeatures
+            .filter((city) => city.properties.ADM0_A3 === countryCode)
+            .sort((first, second) => Number(second.properties.POP_MAX) - Number(first.properties.POP_MAX))
+            .map((city) => ({
+              name: city.properties.NAME_EN || city.properties.NAME,
+              latitude: city.geometry.coordinates[1],
+              longitude: city.geometry.coordinates[0],
+            }))
+          : [];
+        const cities = naturalEarthCities.slice(0, 12);
+
+        for (const city of cities) {
+          addCityMarker(city.name, city.latitude, city.longitude);
+        }
+      }
+
+      function updateCityLabels() {
+        const viewport = renderer.domElement.getBoundingClientRect();
+        cityLeaders.setAttribute("viewBox", `0 0 ${viewport.width} ${viewport.height}`);
+        const offsets = [
+          { x: 30, y: -28 }, { x: -30, y: -28 },
+          { x: 30, y: 28 }, { x: -30, y: 28 },
+          { x: 0, y: -48 }, { x: 0, y: 48 },
+          { x: 58, y: 0 }, { x: -58, y: 0 },
+        ];
+        const occupied = [];
+        const earthQuaternion = earth.getWorldQuaternion(new THREE.Quaternion());
+
+        for (let index = 0; index < cityLabelEntries.length; index += 1) {
+          const entry = cityLabelEntries[index];
+          const worldPosition = earth.localToWorld(entry.localPosition.clone());
+          const worldNormal = entry.localPosition.clone().normalize().applyQuaternion(earthQuaternion);
+          const viewDirection = camera.position.clone().sub(worldPosition).normalize();
+          const projected = worldPosition.clone().project(camera);
+          const isVisible = worldNormal.dot(viewDirection) > 0.04 && projected.z >= -1 && projected.z <= 1 &&
+            Math.abs(projected.x) <= 1 && Math.abs(projected.y) <= 1;
+
+          if (!isVisible) {
+            entry.element.style.visibility = "hidden";
+            entry.leader.style.display = "none";
+            continue;
+          }
+
+          const anchorX = (projected.x * 0.5 + 0.5) * viewport.width;
+          const anchorY = (-projected.y * 0.5 + 0.5) * viewport.height;
+          const labelWidth = entry.element.offsetWidth;
+          const labelHeight = entry.element.offsetHeight;
+          let placement = null;
+
+          for (let offsetIndex = 0; offsetIndex < offsets.length; offsetIndex += 1) {
+            const offset = offsets[(index + offsetIndex) % offsets.length];
+            const leftSide = offset.x < 0;
+            const left = THREE.MathUtils.clamp(
+              anchorX + offset.x - (leftSide ? labelWidth : 0),
+              8,
+              Math.max(8, viewport.width - labelWidth - 8)
+            );
+            const top = THREE.MathUtils.clamp(anchorY + offset.y - labelHeight / 2, 8, Math.max(8, viewport.height - labelHeight - 8));
+            const bounds = { left, top, right: left + labelWidth, bottom: top + labelHeight };
+            const overlaps = occupied.some((other) =>
+              bounds.left < other.right + 6 && bounds.right + 6 > other.left &&
+              bounds.top < other.bottom + 5 && bounds.bottom + 5 > other.top
+            );
+
+            if (!overlaps) {
+              placement = { ...bounds, leftSide };
+              break;
+            }
+          }
+
+          if (!placement) placement = { left: anchorX + 30, top: anchorY, right: anchorX + 30 + labelWidth, bottom: anchorY + labelHeight, leftSide: false };
+          occupied.push(placement);
+          entry.element.style.left = `${placement.left + (placement.leftSide ? labelWidth : 0)}px`;
+          entry.element.style.top = `${placement.top}px`;
+          entry.element.style.transform = placement.leftSide ? "translate(-100%, 0)" : "none";
+          entry.element.style.visibility = "visible";
+
+          const lineEndX = THREE.MathUtils.clamp(anchorX, placement.left, placement.right);
+          const lineEndY = THREE.MathUtils.clamp(anchorY, placement.top, placement.bottom);
+          entry.leader.setAttribute("x1", anchorX);
+          entry.leader.setAttribute("y1", anchorY);
+          entry.leader.setAttribute("x2", lineEndX);
+          entry.leader.setAttribute("y2", lineEndY);
+          entry.leader.style.display = "";
+        }
+      }
+
+      function createPlanet({ name, orbitRadius, radius, color, speed, phase, spin }) {
+        const orbit = createOrbit(orbitRadius, 0.36);
+        const planet = new THREE.Mesh(
+          new THREE.SphereGeometry(radius, 48, 32),
+          new THREE.MeshStandardMaterial({ color, roughness: 0.9 })
+        );
+        const planetGroup = new THREE.Group();
+        planetGroup.add(planet);
+        solarSystemDetails.add(planetGroup);
+
+        if (name === "Saturn") {
+          const rings = new THREE.Mesh(
+            new THREE.RingGeometry(radius * 1.35, radius * 2.05, 96),
+            new THREE.MeshStandardMaterial({ color: 0xcbbd9a, side: THREE.DoubleSide, transparent: true, opacity: 0.72, roughness: 1 })
+          );
+          rings.rotation.x = Math.PI / 2.5;
+          planetGroup.add(rings);
+        }
+
+        return (delta, elapsed) => {
+          const parameter = ((phase + elapsed * speed) % fullOrbit) / fullOrbit;
+          const point = orbit.getPoint(parameter);
+          planetGroup.position.set(point.x, point.y, solarPlaneZ);
+          planet.rotation.y += delta * spin;
+        };
+      }
+
+      const updateMercury = createPlanet({ name: "Mercury", orbitRadius: 13, radius: 0.34, color: "#9b9187", speed: 0.026, phase: 0, spin: 0.16 });
+      const updateVenus = createPlanet({ name: "Venus", orbitRadius: 21, radius: 0.56, color: "#d2a66f", speed: 0.018, phase: 0, spin: 0.1 });
+      const updateMars = createPlanet({ name: "Mars", orbitRadius: 39, radius: 0.5, color: "#bd684b", speed: 0.008, phase: 0, spin: 0.18 });
+      const updateJupiter = createPlanet({ name: "Jupiter", orbitRadius: 46, radius: 1.05, color: "#c69a79", speed: 0.0045, phase: 0, spin: 0.2 });
+      const updateSaturn = createPlanet({ name: "Saturn", orbitRadius: 52, radius: 0.82, color: "#cbb582", speed: 0.003, phase: fullOrbit - 0.12, spin: 0.14 });
+
+      const raycaster = new THREE.Raycaster();
+      raycaster.params.Points.threshold = 2.2;
+      const pointer = new THREE.Vector2();
+      let soloEarthView = false;
+      let zoomTransition = null;
+      let earthAlignment = null;
+      let pinnedCountry = null;
+      let countryFocusActive = false;
+      let earthPointerActive = false;
+      let earthDragActive = false;
+      let activeEarthPointerId = null;
+      let earthPointerStartX = 0;
+      let earthPointerStartY = 0;
+      let lastDragX = 0;
+      let lastDragY = 0;
+      let suppressEarthClickUntil = 0;
+      let autoRotationSpeed = 0.045;
+      let rotationResumeElapsed = 0;
+      const countryTooltip = document.querySelector("#country-tooltip");
+      const countryTooltipLabel = document.querySelector("#country-tooltip-label");
+      const countryTooltipName = document.querySelector("#country-tooltip-name");
+
+      function raycastEarth(event) {
+        const bounds = renderer.domElement.getBoundingClientRect();
+        pointer.x = ((event.clientX - bounds.left) / bounds.width) * 2 - 1;
+        pointer.y = -((event.clientY - bounds.top) / bounds.height) * 2 + 1;
+        raycaster.setFromCamera(pointer, camera);
+        return raycaster.intersectObject(earth, false)[0] || null;
+      }
+
+      function positionTooltip(event) {
+        countryTooltip.style.left = `${Math.max(12, Math.min(event.clientX + 16, innerWidth - 232))}px`;
+        countryTooltip.style.top = `${Math.max(12, Math.min(event.clientY + 16, innerHeight - 70))}px`;
+      }
+
+      function shortestAngleDelta(from, to) {
+        return Math.atan2(Math.sin(to - from), Math.cos(to - from));
+      }
+
+      function beginEarthAlignment(targetYaw = 0) {
+        const yaw = earth.rotation.y + shortestAngleDelta(earth.rotation.y, targetYaw);
+        earthAlignment = {
+          elapsed: 0,
+          duration: 0.9,
+          startX: earth.rotation.x,
+          startY: earth.rotation.y,
+          startZ: earth.rotation.z,
+          deltaX: shortestAngleDelta(earth.rotation.x, 0),
+          deltaY: yaw - earth.rotation.y,
+          deltaZ: shortestAngleDelta(earth.rotation.z, 0),
+          targetY: yaw,
+        };
+        autoRotationSpeed = 0;
+        rotationResumeElapsed = 0;
+      }
+
+      function beginCameraTransition(endDistance, endTarget = controls.target, endDirection = null) {
+        const cameraOffset = camera.position.clone().sub(controls.target);
+        zoomTransition = {
+          elapsed: 0,
+          duration: 0.9,
+          startDistance: cameraOffset.length(),
+          endDistance,
+          startTarget: controls.target.clone(),
+          endTarget: endTarget.clone(),
+          startDirection: cameraOffset.clone().normalize(),
+          endDirection: (endDirection || cameraOffset).clone().normalize(),
+        };
+      }
+
+      function setSoloEarthView(enabled) {
+        soloEarthView = enabled;
+        solarSystemDetails.visible = !enabled;
+        if (enabled) {
+          countryFocusActive = false;
+          beginEarthAlignment(0);
+          camera.up.set(0, 1, 0);
+          beginCameraTransition(8.5, earth.position, new THREE.Vector3(0, 0, 1));
+        } else {
+          earthAlignment = null;
+          countryFocusActive = false;
+          activeCityCountry = null;
+          clearCityMarkers();
+          rotationResumeElapsed = 0;
+          camera.up.set(0, 1, 0);
+          beginCameraTransition(32, earth.position, new THREE.Vector3(0, 0, 1));
+        }
+      }
+
+      function focusLocation(latitude, longitude, country = null, locationName = "") {
+        const longitudeRadians = THREE.MathUtils.degToRad(longitude);
+        const targetYaw = -Math.PI / 2 - longitudeRadians;
+        beginEarthAlignment(targetYaw);
+        countryFocusActive = true;
+        soloEarthView = true;
+        solarSystemDetails.visible = false;
+        if (country) showMajorCities(country);
+        else clearCityMarkers();
+        if (locationName && !cityLabelEntries.some((entry) => entry.element.textContent.toLowerCase() === locationName.toLowerCase())) {
+          addCityMarker(locationName, latitude, longitude);
+        }
+
+        const targetRotation = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 1, 0), targetYaw);
+        const localPoint = geographicPoint(longitude, latitude, earthRadius * 1.01).applyQuaternion(targetRotation);
+        const worldPoint = earth.position.clone().add(localPoint);
+        camera.up.set(0, 1, 0);
+        beginCameraTransition(4.5, worldPoint, new THREE.Vector3(0, 0, 1));
+      }
+
+      function focusCountry(country) {
+        const [longitude, latitude] = geoCentroid(country);
+        const name = country.properties.ADMIN || country.properties.NAME_EN || country.properties.NAME;
+        const searchId = ++activeSearchId;
+        const result = {
+          name,
+          display_name: name,
+          lat: String(latitude),
+          lon: String(longitude),
+          address: {
+            country: name,
+            country_code: (country.properties.ISO_A2 !== "-99" ? country.properties.ISO_A2 : country.properties.ADM0_A3).toLowerCase(),
+          },
+        };
+        document.body.classList.add("search-open");
+        panelKicker.textContent = "Selected country";
+        panelTitle.textContent = name;
+        panelSubtitle.textContent = "Finding local places and highlights...";
+        addLocationDetails(result);
+        const cityContext = setActiveCityForSearch(result, searchId);
+        focusLocation(latitude, longitude, country, name);
+        void loadCityRecommendations(latitude, longitude, cityContext.cityName, name, cityContext.cityKey, searchId);
+      }
+
+      function restoreUniverseView() {
+        if (!soloEarthView) return;
+        pinnedCountry = null;
+        countryTooltip.hidden = true;
+        setSoloEarthView(false);
+      }
+
+      const locationSearchForm = document.querySelector("#location-search-form");
+      const locationSearchInput = document.querySelector("#location-search");
+      const locationSearchButton = document.querySelector("#location-search-button");
+      const randomDestinationButton = document.querySelector("#random-destination");
+      const panelKicker = document.querySelector("#panel-kicker");
+      const panelTitle = document.querySelector("#panel-title");
+      const panelSubtitle = document.querySelector("#panel-subtitle");
+      const locationDetails = document.querySelector("#location-details");
+      const cityPlacesPanel = document.querySelector("#city-places");
+      const placesCityLabel = document.querySelector("#places-city");
+      const polaroidSlot = document.querySelector("#polaroid-slot");
+      const placeActions = document.createElement("div");
+      placeActions.className = "place-actions";
+      const placeDislikeButton = document.createElement("button");
+      placeDislikeButton.className = "place-action";
+      placeDislikeButton.type = "button";
+      placeDislikeButton.setAttribute("aria-label", "Pass on this place");
+      placeDislikeButton.title = "Pass on this place";
+      placeDislikeButton.textContent = "×";
+      const placeLikeButton = document.createElement("button");
+      placeLikeButton.className = "place-action";
+      placeLikeButton.type = "button";
+      placeLikeButton.setAttribute("aria-label", "Save this place");
+      placeLikeButton.title = "Save this place";
+      placeLikeButton.textContent = "♡";
+      placeActions.append(placeDislikeButton, placeLikeButton);
+      const savedCityName = document.querySelector("#saved-city-name");
+      const likedPlacesElement = document.querySelector("#liked-places");
+      const dislikedPlacesElement = document.querySelector("#disliked-places");
+      const likedCountElement = document.querySelector("#liked-count");
+      const dislikedCountElement = document.querySelector("#disliked-count");
+      const cityFavoritesStorageKey = "orbit-earth-city-favorites-v1";
+      const worldCitiesUrl = "https://raw.githubusercontent.com/datasets/world-cities/master/data/world-cities.csv";
+      let cityFavorites = {};
+      try {
+        const storedFavorites = JSON.parse(localStorage.getItem(cityFavoritesStorageKey) || "{}");
+        cityFavorites = storedFavorites && typeof storedFavorites === "object" && !Array.isArray(storedFavorites)
+          ? storedFavorites
+          : {};
+      } catch {
+        cityFavorites = {};
+      }
+      let activeCityKey = "";
+      let activeCityName = "";
+      let activeCountryName = "";
+      let activeCityCards = [];
+      let activeCityCardIndex = 0;
+      let isLoadingCityCards = false;
+      let globalCityRecordsPromise = null;
+      let previousRandomCityId = "";
+      let previousRandomCountry = "";
+      let lastGeocodeRequest = 0;
+      let activeSearchId = 0;
+      const geocodeCache = new Map();
+      const placePhotoCache = new Map();
+      const athensRecommendations = [
+        { id: "athens-acropolis", name: "Acropolis of Athens", category: "Essential sightseeing", note: "Explore the hilltop citadel and its ancient monuments.", latitude: 37.9715, longitude: 23.7257 },
+        { id: "athens-parthenon", name: "Parthenon", category: "Essential sightseeing", note: "The classical temple at the heart of the Acropolis.", latitude: 37.9715, longitude: 23.7269 },
+        { id: "athens-acropolis-museum", name: "Acropolis Museum", category: "Essential sightseeing", note: "Archaeology and sculpture beside the Acropolis.", latitude: 37.9684, longitude: 23.7285 },
+        { id: "athens-ancient-agora", name: "Ancient Agora", category: "Essential sightseeing", note: "Walk the civic heart of ancient Athens.", latitude: 37.9747, longitude: 23.7214 },
+        { id: "athens-national-archaeological", name: "National Archaeological Museum", category: "Essential sightseeing", note: "A landmark collection of Greek antiquities.", latitude: 37.9891, longitude: 23.7326 },
+        { id: "athens-emst", name: "National Museum of Contemporary Art (EMST)", category: "Essential sightseeing", note: "Contemporary Greek and international art in a former brewery.", latitude: 37.9687, longitude: 23.7124 },
+        { id: "athens-olympian-zeus", name: "Temple of Olympian Zeus", category: "Essential sightseeing", note: "Monumental columns from one of Greece's largest ancient temples.", latitude: 37.9693, longitude: 23.7331 },
+        { id: "athens-panathenaic", name: "Panathenaic Stadium", category: "Essential sightseeing", note: "The marble stadium of the first modern Olympic Games.", latitude: 37.9683, longitude: 23.7411 },
+        { id: "athens-plaka", name: "Plaka", category: "Essential sightseeing", note: "Wander the old lanes beneath the Acropolis.", latitude: 37.9716, longitude: 23.7296 },
+        { id: "athens-monastiraki", name: "Monastiraki Square", category: "Essential sightseeing", note: "A lively central square beside the flea market.", latitude: 37.9763, longitude: 23.7257 },
+        { id: "athens-syntagma", name: "Syntagma Square", category: "Essential sightseeing", note: "The city's central square and ceremonial heart.", latitude: 37.9755, longitude: 23.7348 },
+        { id: "athens-philopappos", name: "Philopappos Hill", category: "Essential sightseeing", note: "A scenic walking route with Acropolis views.", latitude: 37.9655, longitude: 23.7211 },
+        { id: "athens-benaki", name: "Benaki Museum", category: "Essential sightseeing", note: "Greek culture and art across centuries.", latitude: 37.9755, longitude: 23.7417 },
+        { id: "athens-kerameikos", name: "Kerameikos", category: "Essential sightseeing", note: "Ancient cemetery, city walls, and archaeological museum.", latitude: 37.9780, longitude: 23.7177 },
+        { id: "athens-sounio", name: "Cape Sounion & Temple of Poseidon", category: "Essential sightseeing", note: "A coastal day trip to the temple above the Aegean.", latitude: 37.6506, longitude: 24.0244 },
+        { id: "athens-psarades", name: "Psarades / Psaras Taverna", category: "Local food", note: "Seafood and Greek taverna dishes in the Plaka area.", latitude: 37.9734, longitude: 23.7254 },
+        { id: "athens-feyrouz", name: "Feyrouz", category: "Local food", note: "Eastern Mediterranean street food and filled pies.", latitude: 37.9815, longitude: 23.7278 },
+        { id: "athens-ergon", name: "ERGON House Agora", category: "Local food", note: "A modern food hall for Greek produce and regional bites.", latitude: 37.9760, longitude: 23.7350 },
+        { id: "athens-mokka", name: "Mokka", category: "Local food", note: "Traditional coffee and a classic central-market stop.", latitude: 37.9818, longitude: 23.7277 },
+        { id: "athens-katsanveba", name: "Taverna To Katsanveba", category: "Traditional restaurant", note: "A neighborhood-style Greek taverna experience.", latitude: 37.9842, longitude: 23.7260 },
+        { id: "athens-diporto", name: "Diporto", category: "Traditional restaurant", note: "A storied market-area tavern serving homestyle dishes.", latitude: 37.9825, longitude: 23.7278 },
+        { id: "athens-klimataria", name: "Klimataria", category: "Traditional restaurant", note: "Traditional Greek cooking in a lively historic dining room.", latitude: 37.9836, longitude: 23.7250 },
+        { id: "athens-varoulko", name: "Varoulko Seaside", category: "Traditional restaurant", note: "Greek seafood dining by the water at Mikrolimano.", latitude: 37.9383, longitude: 23.6435 },
+        { id: "athens-nolan", name: "Nolan", category: "Traditional restaurant", note: "Contemporary Greek cooking with international influences.", latitude: 37.9759, longitude: 23.7356 },
+        { id: "athens-kuki", name: "Kuki", category: "Café", note: "A playful local café stop near the historic centre.", latitude: 37.9750, longitude: 23.7270 },
+        { id: "athens-equi", name: "Equi", category: "Café", note: "A relaxed coffee and café stop in central Athens.", latitude: 37.9785, longitude: 23.7355 },
+        { id: "athens-little-kook", name: "Little Kook", category: "Café", note: "A whimsical, elaborately themed café in Psyrri.", latitude: 37.9774, longitude: 23.7259 },
+        { id: "athens-taf", name: "Taf Coffee", category: "Café", note: "Specialty coffee roasted in Athens.", latitude: 37.9859, longitude: 23.7350 },
+        { id: "athens-brettos", name: "Brettos Bar", category: "Nightlife", note: "A historic Plaka bar known for its colorful bottle wall.", latitude: 37.9694, longitude: 23.7285 },
+        { id: "athens-six-dogs", name: "Six d.o.g.s", category: "Nightlife", note: "A courtyard bar and live-music venue in the centre.", latitude: 37.9782, longitude: 23.7261 },
+      ];
+
+      function findCountryForGeocode(result) {
+        const polygonMatch = findCountry(Number(result.lon), Number(result.lat));
+        if (polygonMatch) return polygonMatch;
+
+        const countryCode = result.address?.country_code?.toUpperCase();
+        const countryName = result.address?.country?.toLowerCase();
+        return countryFeatures.find((feature) => {
+          const properties = feature.properties;
+          return properties.ISO_A2 === countryCode || properties.ADM0_A3 === countryCode ||
+            (countryName && (properties.ADMIN || properties.NAME_EN || "").toLowerCase() === countryName);
+        }) || null;
+      }
+
+      function addLocationDetails(result) {
+        const latitude = Number(result.lat);
+        const longitude = Number(result.lon);
+        const address = result.address || {};
+        const country = findCountryForGeocode(result);
+        const countryCode = country?.properties.ADM0_A3;
+        const matchingCity = cityFeatures.find((city) =>
+          city.properties.ADM0_A3 === countryCode &&
+          (city.properties.NAME_EN || city.properties.NAME).toLowerCase() === (result.name || "").toLowerCase()
+        );
+        const population = Number(result.extratags?.population || matchingCity?.properties.POP_MAX || country?.properties.POP_EST);
+        const formattedPopulation = Number.isFinite(population) && population > 0
+          ? `~${new Intl.NumberFormat(navigator.language || "en").format(population)}`
+          : "Not available";
+        const formattedCoordinates = `${Math.abs(latitude).toFixed(4)}° ${latitude >= 0 ? "N" : "S"} · ${Math.abs(longitude).toFixed(4)}° ${longitude >= 0 ? "E" : "W"}`;
+        const rows = [
+          ["Country · Χώρα", address.country || "Not specified"],
+          ["Continent · Ήπειρος", country?.properties.CONTINENT || "Not available"],
+          ["Population · Πληθυσμός", formattedPopulation],
+          ["Coordinates · Συντεταγμένες", formattedCoordinates],
+        ];
+        locationDetails.replaceChildren();
+        for (const [label, value] of rows) {
+          const item = document.createElement("div");
+          item.className = "detail-row";
+          const itemLabel = document.createElement("span");
+          itemLabel.className = "detail-label";
+          itemLabel.textContent = label;
+          const itemValue = document.createElement("span");
+          itemValue.className = "detail-value";
+          itemValue.textContent = value;
+          item.append(itemLabel, itemValue);
+          locationDetails.append(item);
+        }
+        locationDetails.hidden = false;
+      }
+
+      function normalizeCityName(name) {
+        return name.normalize("NFKD").replace(/[\u0300-\u036f]/g, "").toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "");
+      }
+
+      function getCityFavoriteState(cityKey) {
+        if (!cityFavorites[cityKey] || typeof cityFavorites[cityKey] !== "object") {
+          cityFavorites[cityKey] = { liked: [], disliked: [] };
+        }
+        cityFavorites[cityKey].liked = Array.isArray(cityFavorites[cityKey].liked) ? cityFavorites[cityKey].liked : [];
+        cityFavorites[cityKey].disliked = Array.isArray(cityFavorites[cityKey].disliked) ? cityFavorites[cityKey].disliked : [];
+        return cityFavorites[cityKey];
+      }
+
+      function renderSavedCityPlaces() {
+        const state = getCityFavoriteState(activeCityKey);
+        const cardsById = new Map(activeCityCards.map((card) => [card.id, card]));
+
+        function fillSavedList(container, countElement, ids, emptyText) {
+          container.replaceChildren();
+          countElement.textContent = String(ids.length);
+          const names = ids.map((savedPlace) => {
+            if (typeof savedPlace === "string") return cardsById.get(savedPlace)?.name || savedPlace;
+            return savedPlace?.name;
+          }).filter(Boolean);
+          if (!names.length) {
+            const empty = document.createElement("span");
+            empty.className = "saved-none";
+            empty.textContent = emptyText;
+            container.append(empty);
+            return;
+          }
+          for (const name of names) {
+            const tag = document.createElement("span");
+            tag.className = "saved-place";
+            tag.textContent = name;
+            container.append(tag);
+          }
+        }
+
+        fillSavedList(likedPlacesElement, likedCountElement, state.liked, "No saved places yet");
+        fillSavedList(dislikedPlacesElement, dislikedCountElement, state.disliked, "No passes yet");
+      }
+
+      async function loadPlaceCardImage(card, image, cityKey, searchId) {
+        const cacheKey = `${cityKey}|${card.id}`;
+        if (placePhotoCache.has(cacheKey)) {
+          const cachedUrl = placePhotoCache.get(cacheKey);
+          if (cachedUrl) {
+            image.src = cachedUrl;
+            image.hidden = false;
+            image.nextElementSibling.hidden = true;
+          } else {
+            image.hidden = true;
+            image.nextElementSibling.hidden = false;
+          }
+          return;
+        }
+
+        try {
+          let imageUrl = "";
+          const searchParams = new URLSearchParams({
+            action: "query", format: "json", generator: "search",
+            gsrsearch: `${card.name} ${activeCityName} ${activeCountryName}`.trim(),
+            gsrnamespace: "6", gsrlimit: "6", prop: "imageinfo", iiprop: "url", iiurlwidth: "900", origin: "*",
+          });
+          const searchResponse = await fetch(`https://commons.wikimedia.org/w/api.php?${searchParams}`, { signal: AbortSignal.timeout(12000) });
+          if (searchResponse.ok) {
+            const searchData = await searchResponse.json();
+            const stopWords = new Set(["the", "and", "for", "of", "in", "at", "a", "an", "of", "the"]);
+            const placeTokens = normalizeCityName(card.name).split("-").filter((token) => token.length > 2 && !stopWords.has(token));
+            const relevantPage = Object.values(searchData.query?.pages || {}).find((page) => {
+              const title = normalizeCityName(page.title.replace(/^File:/, ""));
+              const distinctiveTokens = placeTokens.filter((token) => !["national", "museum", "temple", "monument", "historic", "athens", "greece"].includes(token));
+              const requiredTokens = distinctiveTokens.length ? distinctiveTokens : placeTokens;
+              return requiredTokens.length > 0 && requiredTokens.every((token) => title.includes(token));
+            });
+            imageUrl = relevantPage?.imageinfo?.[0]?.thumburl || relevantPage?.imageinfo?.[0]?.url || "";
+          }
+
+          placePhotoCache.set(cacheKey, imageUrl || null);
+          if (!imageUrl) {
+            if (searchId === activeSearchId && image.isConnected) {
+              image.hidden = true;
+              image.nextElementSibling.hidden = false;
+            }
+            return;
+          }
+          placePhotoCache.set(cacheKey, imageUrl);
+          if (searchId === activeSearchId && image.isConnected) {
+            image.src = imageUrl;
+            image.hidden = false;
+            image.nextElementSibling.hidden = true;
+          }
+        } catch {
+          placePhotoCache.set(cacheKey, null);
+          if (searchId === activeSearchId && image.isConnected) {
+            image.hidden = true;
+            image.nextElementSibling.hidden = false;
+          }
+        }
+      }
+
+      function renderCityPlaceCard(searchId = activeSearchId) {
+        const state = getCityFavoriteState(activeCityKey);
+        const decided = new Set([...state.liked, ...state.disliked].map((savedPlace) =>
+          typeof savedPlace === "string" ? savedPlace : savedPlace.id
+        ));
+        const availableCards = activeCityCards.filter((card) => !decided.has(card.id));
+        const card = availableCards[activeCityCardIndex];
+        polaroidSlot.replaceChildren();
+
+        if (!card) {
+          placeActions.remove();
+          const empty = document.createElement("div");
+          empty.className = "place-empty";
+          empty.textContent = isLoadingCityCards
+            ? `Finding nearby attractions, restaurants, and cafes in ${activeCityName}...`
+            : activeCityCards.length
+            ? `You've reviewed all ${activeCityCards.length} picks for ${activeCityName}. Your choices are saved only for this city.`
+            : `No nearby places were found for ${activeCityName}. Try another location.`;
+          polaroidSlot.append(empty);
+          placeLikeButton.disabled = true;
+          placeDislikeButton.disabled = true;
+          renderSavedCityPlaces();
+          return;
+        }
+
+        const cardElement = document.createElement("article");
+        cardElement.className = "polaroid";
+        const imageFrame = document.createElement("div");
+        imageFrame.className = "polaroid-image";
+        const image = document.createElement("img");
+        image.loading = "lazy";
+        image.alt = `${card.name} in ${activeCityName}`;
+        const photoPlaceholder = document.createElement("div");
+        photoPlaceholder.className = "polaroid-photo-empty";
+        photoPlaceholder.textContent = `No verified photo found for ${card.name}`;
+        photoPlaceholder.hidden = true;
+        imageFrame.append(image);
+        imageFrame.append(photoPlaceholder);
+
+        const copy = document.createElement("div");
+        copy.className = "polaroid-copy";
+        const category = document.createElement("div");
+        category.className = "place-category";
+        category.textContent = card.category;
+        const name = document.createElement("h3");
+        name.className = "place-name";
+        name.textContent = card.name;
+        const note = document.createElement("p");
+        note.className = "place-note";
+        note.textContent = card.note;
+        copy.append(category, name, note);
+        cardElement.append(imageFrame, copy, placeActions);
+        polaroidSlot.append(cardElement);
+        placeLikeButton.disabled = false;
+        placeDislikeButton.disabled = false;
+        renderSavedCityPlaces();
+        void loadPlaceCardImage(card, image, activeCityKey, searchId);
+      }
+
+      function setActiveCityForSearch(result, searchId) {
+        const address = result.address || {};
+        const locality = address.city || address.town || address.village || address.municipality || address.hamlet || result.name || result.display_name.split(",")[0];
+        const localityAlias = { "greater london": "London", "city of london": "London" }[locality.toLowerCase()];
+        const cityName = localityAlias || locality;
+        const countryCode = (address.country_code || "").toLowerCase();
+        activeCityName = cityName;
+        activeCountryName = address.country || "";
+        activeCityKey = `${normalizeCityName(cityName)}|${countryCode}`;
+        activeCityCards = [];
+        activeCityCardIndex = 0;
+        isLoadingCityCards = true;
+        cityPlacesPanel.hidden = false;
+        placesCityLabel.textContent = cityName;
+        savedCityName.textContent = cityName;
+        const loading = document.createElement("div");
+        loading.className = "place-empty";
+        loading.textContent = `Finding places near ${cityName}...`;
+        polaroidSlot.replaceChildren(loading);
+        placeLikeButton.disabled = true;
+        placeDislikeButton.disabled = true;
+        renderCityPlaceCard(searchId);
+        return { cityName, countryName: activeCountryName, cityKey: activeCityKey };
+      }
+
+      function distanceBetweenKilometers(firstLatitude, firstLongitude, secondLatitude, secondLongitude) {
+        const toRadians = (degrees) => degrees * Math.PI / 180;
+        const latitudeDelta = toRadians(secondLatitude - firstLatitude);
+        const longitudeDelta = toRadians(secondLongitude - firstLongitude);
+        const haversine = Math.sin(latitudeDelta / 2) ** 2 +
+          Math.cos(toRadians(firstLatitude)) * Math.cos(toRadians(secondLatitude)) * Math.sin(longitudeDelta / 2) ** 2;
+        return 6371 * 2 * Math.atan2(Math.sqrt(haversine), Math.sqrt(1 - haversine));
+      }
+
+      function categoryForPhotonFeature(properties, queryCategory) {
+        if (properties.osm_key === "amenity" && properties.osm_value === "cafe") return "Café";
+        if (properties.osm_key === "amenity" && ["restaurant", "fast_food", "food_court"].includes(properties.osm_value)) return "Traditional restaurant";
+        if (properties.osm_key === "amenity" && properties.osm_value === "marketplace") return "Local food";
+        if (properties.osm_key === "shop" && ["deli", "bakery", "confectionery", "greengrocer"].includes(properties.osm_value)) return "Local food";
+        if (properties.osm_key === "amenity" && ["bar", "pub", "nightclub", "music_venue"].includes(properties.osm_value)) return "Nightlife";
+        if (properties.osm_key === "tourism" && ["museum", "attraction", "gallery", "artwork", "viewpoint", "zoo", "aquarium", "theme_park"].includes(properties.osm_value)) return "Essential sightseeing";
+        if (properties.osm_key === "historic" && ["monument", "memorial", "castle", "archaeological_site", "ruins", "fort"].includes(properties.osm_value)) return "Essential sightseeing";
+        if (queryCategory === "sight" && properties.osm_key === "man_made" && ["tower", "obelisk", "lighthouse"].includes(properties.osm_value)) return "Essential sightseeing";
+        return null;
+      }
+
+      async function searchPhotonCategory(category, latitude, longitude) {
+        const url = new URL("https://photon.komoot.io/api/");
+        url.searchParams.set("q", category);
+        url.searchParams.set("lat", String(latitude));
+        url.searchParams.set("lon", String(longitude));
+        url.searchParams.set("limit", "50");
+        url.searchParams.set("lang", "en");
+        const response = await fetch(url, { signal: AbortSignal.timeout(12000) });
+        if (!response.ok) return [];
+        const data = await response.json();
+        return data.features || [];
+      }
+
+      async function loadCityRecommendations(latitude, longitude, cityName, countryName, cityKey, searchId) {
+        const categorySearches = [
+          { query: "historic monument", category: "sight" },
+          { query: "museum", category: "sight" },
+          { query: "tourist attraction", category: "sight" },
+          { query: "food market", category: "food" },
+          { query: "restaurant", category: "restaurant" },
+          { query: "cafe", category: "cafe" },
+          { query: "bar", category: "nightlife" },
+          { query: "nightclub", category: "nightlife" },
+        ];
+        const results = await Promise.all(categorySearches.map(async ({ query, category }) => {
+          try {
+            return (await searchPhotonCategory(query, latitude, longitude)).map((feature) => ({ feature, category }));
+          } catch {
+            return [];
+          }
+        }));
+        if (searchId !== activeSearchId || cityKey !== activeCityKey) return;
+
+        const placesById = new Map();
+        for (const { feature, category } of results.flat()) {
+          const properties = feature.properties || {};
+          const name = properties.name;
+          const coordinates = feature.geometry?.coordinates;
+          if (!name || !Array.isArray(coordinates)) continue;
+          if (["attraction", "cafe", "café", "museum", "restaurant"].includes(name.trim().toLowerCase())) continue;
+          const placeLongitude = Number(coordinates[0]);
+          const placeLatitude = Number(coordinates[1]);
+          const distance = distanceBetweenKilometers(latitude, longitude, placeLatitude, placeLongitude);
+          if (!Number.isFinite(distance) || distance > 30) continue;
+          if (properties.country && countryName && properties.country.toLowerCase() !== countryName.toLowerCase()) continue;
+
+          const placeCategory = categoryForPhotonFeature(properties, category);
+          if (!placeCategory) continue;
+          const id = `${properties.osm_type || "osm"}-${properties.osm_id || `${placeLatitude.toFixed(5)}-${placeLongitude.toFixed(5)}`}`;
+          if (placesById.has(id)) continue;
+          placesById.set(id, {
+            id,
+            name,
+            category: placeCategory,
+            note: `${properties.street ? `${properties.street} · ` : ""}${cityName}`,
+            latitude: placeLatitude,
+            longitude: placeLongitude,
+            distance,
+          });
+        }
+
+        if (cityKey === "athens|gr") {
+          for (const place of athensRecommendations) {
+            if (!placesById.has(place.id)) placesById.set(place.id, { ...place, distance: -1 });
+          }
+        }
+
+        const allPlaces = [...placesById.values()];
+        const selectedPlaces = [];
+        const selectedIds = new Set();
+        const recommendationSections = [
+          { category: "Essential sightseeing", maximum: 15 },
+          { category: "Local food", maximum: 4 },
+          { category: "Traditional restaurant", maximum: 5 },
+          { category: "Café", maximum: 4 },
+          { category: "Nightlife", maximum: 2 },
+        ];
+        for (const section of recommendationSections) {
+          const categoryPlaces = allPlaces.filter((place) => place.category === section.category).sort((first, second) => first.distance - second.distance);
+          for (const place of categoryPlaces.slice(0, section.maximum)) {
+            selectedPlaces.push(place);
+            selectedIds.add(place.id);
+          }
+        }
+        activeCityCards = selectedPlaces.slice(0, 30);
+        activeCityCardIndex = 0;
+        isLoadingCityCards = false;
+        renderCityPlaceCard(searchId);
+      }
+
+      async function loadGlobalCities() {
+        if (!globalCityRecordsPromise) {
+          globalCityRecordsPromise = fetch(worldCitiesUrl)
+            .then((response) => {
+              if (!response.ok) throw new Error("Global city list is unavailable.");
+              return response.text();
+            })
+            .then((csv) => csvParse(csv).map((row) => ({
+              name: row.name?.trim(),
+              country: row.country?.trim(),
+              id: row.geonameid,
+            })).filter((city) => city.name && city.country && city.id))
+            .catch((error) => {
+              globalCityRecordsPromise = null;
+              throw error;
+            });
+        }
+        return globalCityRecordsPromise;
+      }
+
+      async function chooseRandomDestination() {
+        randomDestinationButton.disabled = true;
+        randomDestinationButton.textContent = "🎲 Finding...";
+        let submittedSearch = false;
+        try {
+          const cities = await loadGlobalCities();
+          const countries = [...new Set(cities.map((city) => city.country))];
+          const eligibleCountries = countries.filter((country) => country !== previousRandomCountry);
+          const country = eligibleCountries[Math.floor(Math.random() * eligibleCountries.length)] || countries[Math.floor(Math.random() * countries.length)];
+          const countryCities = cities.filter((city) => city.country === country && city.id !== previousRandomCityId);
+          const destination = countryCities[Math.floor(Math.random() * countryCities.length)];
+          if (!destination) throw new Error("Could not choose a destination. Try again.");
+
+          previousRandomCountry = country;
+          previousRandomCityId = destination.id;
+          locationSearchInput.value = `${destination.name}, ${destination.country}`;
+          locationSearchForm.requestSubmit();
+          submittedSearch = true;
+        } catch (error) {
+          document.body.classList.add("search-open");
+          panelKicker.textContent = "Random destination";
+          panelTitle.textContent = "Could not choose a city";
+          panelSubtitle.textContent = error.message;
+        } finally {
+          if (!submittedSearch) {
+            randomDestinationButton.disabled = false;
+            randomDestinationButton.textContent = "🎲 Random Destination";
+          }
+        }
+      }
+
+      randomDestinationButton.addEventListener("click", chooseRandomDestination);
+
+      function recordPlaceDecision(decision) {
+        const state = getCityFavoriteState(activeCityKey);
+        const decidedIds = new Set([...state.liked, ...state.disliked].map((savedPlace) =>
+          typeof savedPlace === "string" ? savedPlace : savedPlace.id
+        ));
+        const card = activeCityCards.find((item) => !decidedIds.has(item.id));
+        if (!card) return;
+        const opposingKey = decision === "liked" ? "disliked" : "liked";
+        const targetList = state[decision];
+        if (!targetList.some((savedPlace) => (typeof savedPlace === "string" ? savedPlace : savedPlace.id) === card.id)) {
+          targetList.push({ id: card.id, name: card.name });
+        }
+        state[opposingKey] = state[opposingKey].filter((savedPlace) =>
+          (typeof savedPlace === "string" ? savedPlace : savedPlace.id) !== card.id
+        );
+        try {
+          localStorage.setItem(cityFavoritesStorageKey, JSON.stringify(cityFavorites));
+        } catch (error) {
+          console.warn("Could not save city favorites:", error);
+        }
+        activeCityCardIndex = 0;
+        renderCityPlaceCard();
+      }
+
+      placeLikeButton.addEventListener("click", () => recordPlaceDecision("liked"));
+      placeDislikeButton.addEventListener("click", () => recordPlaceDecision("disliked"));
+
+      async function geocodeLocation(query) {
+        if (geocodeCache.has(query.toLowerCase())) return geocodeCache.get(query.toLowerCase());
+        const delay = Math.max(0, 1000 - (Date.now() - lastGeocodeRequest));
+        if (delay) await new Promise((resolve) => setTimeout(resolve, delay));
+        lastGeocodeRequest = Date.now();
+
+        const url = new URL("https://nominatim.openstreetmap.org/search");
+        url.searchParams.set("q", query);
+        url.searchParams.set("format", "jsonv2");
+        url.searchParams.set("limit", "1");
+        url.searchParams.set("addressdetails", "1");
+        url.searchParams.set("extratags", "1");
+        const response = await fetch(url, { headers: { "Accept-Language": navigator.language || "en" } });
+        if (!response.ok) throw new Error("The location search is temporarily unavailable.");
+        const results = await response.json();
+        if (!results.length) throw new Error("No matching place found. Try a city or country name.");
+        geocodeCache.set(query.toLowerCase(), results[0]);
+        return results[0];
+      }
+
+      locationSearchForm.addEventListener("submit", async (event) => {
+        event.preventDefault();
+        const query = locationSearchInput.value.trim();
+        if (!query) return;
+
+        const searchId = ++activeSearchId;
+        document.body.classList.add("search-open");
+        locationSearchButton.disabled = true;
+        locationSearchButton.textContent = "Searching";
+        randomDestinationButton.disabled = true;
+        panelKicker.textContent = "OpenStreetMap search";
+        panelTitle.textContent = query;
+        panelSubtitle.textContent = "Finding coordinates and local highlights...";
+        locationDetails.hidden = true;
+
+        try {
+          const result = await geocodeLocation(query);
+          if (searchId !== activeSearchId) return;
+          await countryDataPromise;
+          const latitude = Number(result.lat);
+          const longitude = Number(result.lon);
+          const country = findCountryForGeocode(result);
+          const locationName = result.name || result.display_name.split(",")[0];
+          const countryName = result.address?.country || "";
+          panelKicker.textContent = countryName || "Geographic search";
+          panelTitle.textContent = locationName;
+          panelSubtitle.textContent = result.display_name;
+          addLocationDetails(result);
+          const cityContext = setActiveCityForSearch(result, searchId);
+          focusLocation(latitude, longitude, country, locationName);
+          void loadCityRecommendations(latitude, longitude, cityContext.cityName, countryName, cityContext.cityKey, searchId);
+        } catch (error) {
+          if (searchId === activeSearchId) {
+            panelKicker.textContent = "Search unavailable";
+            panelTitle.textContent = "Location not found";
+            panelSubtitle.textContent = error.message;
+            locationDetails.hidden = true;
+          }
+        } finally {
+          if (searchId === activeSearchId) {
+            locationSearchButton.disabled = false;
+            locationSearchButton.textContent = "Explore";
+            randomDestinationButton.disabled = false;
+          }
+        }
+      });
+
+      renderer.domElement.addEventListener("pointerdown", (event) => {
+        if (event.button !== 0 || activeEarthPointerId !== null || !raycastEarth(event)) return;
+
+        earthPointerActive = true;
+        earthDragActive = false;
+        activeEarthPointerId = event.pointerId;
+        earthPointerStartX = event.clientX;
+        earthPointerStartY = event.clientY;
+        lastDragX = event.clientX;
+        lastDragY = event.clientY;
+        renderer.domElement.setPointerCapture(event.pointerId);
+        event.preventDefault();
+        event.stopImmediatePropagation();
+      }, true);
+
+      renderer.domElement.addEventListener("pointermove", (event) => {
+        if (!earthPointerActive || event.pointerId !== activeEarthPointerId) return;
+        const totalMovementX = event.clientX - earthPointerStartX;
+        const totalMovementY = event.clientY - earthPointerStartY;
+        if (!earthDragActive && Math.hypot(totalMovementX, totalMovementY) <= 5) return;
+
+        if (!earthDragActive) {
+          earthDragActive = true;
+          earthAlignment = null;
+          autoRotationSpeed = 0;
+          rotationResumeElapsed = 0;
+          controls.enableRotate = false;
+          renderer.domElement.style.cursor = "grabbing";
+          if (countryFocusActive) {
+            countryFocusActive = false;
+            activeCityCountry = null;
+            pinnedCountry = null;
+            countryTooltip.hidden = true;
+            clearCityMarkers();
+            beginCameraTransition(8.5, earth.position);
+          }
+        }
+
+        const movementX = earthDragActive && lastDragX === earthPointerStartX && lastDragY === earthPointerStartY
+          ? totalMovementX
+          : event.clientX - lastDragX;
+        const movementY = earthDragActive && lastDragX === earthPointerStartX && lastDragY === earthPointerStartY
+          ? totalMovementY
+          : event.clientY - lastDragY;
+        earth.rotation.y += movementX * 0.008;
+        earth.rotation.x += movementY * 0.008;
+        lastDragX = event.clientX;
+        lastDragY = event.clientY;
+      });
+
+      function finishEarthDrag(event) {
+        if (!earthPointerActive || event.pointerId !== activeEarthPointerId) return;
+        earthPointerActive = false;
+        activeEarthPointerId = null;
+        if (earthDragActive) {
+          controls.enableRotate = true;
+          renderer.domElement.style.cursor = "";
+          rotationResumeElapsed = 0;
+          suppressEarthClickUntil = performance.now() + 100;
+        }
+        earthDragActive = false;
+      }
+
+      renderer.domElement.addEventListener("pointerup", finishEarthDrag);
+      renderer.domElement.addEventListener("pointercancel", finishEarthDrag);
+
+      renderer.domElement.addEventListener("mousemove", (event) => {
+        if (pinnedCountry || earthPointerActive) return;
+        const intersection = raycastEarth(event);
+        renderer.domElement.style.cursor = intersection ? "pointer" : "";
+
+        if (!intersection) {
+          countryTooltip.hidden = true;
+          return;
+        }
+
+        positionTooltip(event);
+        if (!countryDataReady) {
+          countryTooltipLabel.textContent = "COUNTRY";
+          countryTooltipName.textContent = "Loading boundaries...";
+          countryTooltip.hidden = false;
+          return;
+        }
+
+        const country = countryAtUV(intersection.uv);
+        if (!country) {
+          countryTooltip.hidden = true;
+          return;
+        }
+
+        countryTooltipLabel.textContent = "COUNTRY";
+        countryTooltipName.textContent = country.properties.ADMIN || country.properties.NAME_EN || country.properties.NAME;
+        countryTooltip.hidden = false;
+      });
+
+      renderer.domElement.addEventListener("mouseleave", () => {
+        renderer.domElement.style.cursor = "";
+        if (!pinnedCountry) countryTooltip.hidden = true;
+      });
+
+      renderer.domElement.addEventListener("click", (event) => {
+        if (performance.now() < suppressEarthClickUntil) return;
+        const intersection = raycastEarth(event);
+        if (!intersection) {
+          pinnedCountry = null;
+          countryTooltip.hidden = true;
+          if (soloEarthView && raycaster.intersectObject(starfield, false).length > 0) {
+            restoreUniverseView();
+          }
+          return;
+        }
+
+        pinnedCountry = countryDataReady ? countryAtUV(intersection.uv) : null;
+        if (pinnedCountry) {
+          countryTooltipLabel.textContent = "SELECTED COUNTRY";
+          countryTooltipName.textContent = pinnedCountry.properties.ADMIN || pinnedCountry.properties.NAME_EN || pinnedCountry.properties.NAME;
+          positionTooltip(event);
+          countryTooltip.hidden = false;
+          focusCountry(pinnedCountry);
+        } else {
+          countryTooltip.hidden = true;
+          if (!soloEarthView) setSoloEarthView(true);
+        }
+      });
+
+      renderer.domElement.addEventListener("dblclick", (event) => {
+        if (performance.now() >= suppressEarthClickUntil && !raycastEarth(event)) restoreUniverseView();
+      });
+
+      const clock = new THREE.Clock();
+      function animate() {
+        requestAnimationFrame(animate);
+        const delta = clock.getDelta();
+        const elapsed = clock.elapsedTime;
+        starMaterial.uniforms.uTime.value = elapsed;
+        const previousEarthPosition = earth.position.clone();
+        const earthParameter = ((elapsed * earthSpeed) % fullOrbit) / fullOrbit;
+        const earthPoint = earthOrbit.getPoint(earthParameter);
+        earth.position.set(earthPoint.x, earthPoint.y, solarPlaneZ);
+        const earthMovement = earth.position.clone().sub(previousEarthPosition);
+        camera.position.add(earthMovement);
+        controls.target.add(earthMovement);
+
+        if (zoomTransition) {
+          zoomTransition.elapsed += delta;
+          const progress = Math.min(zoomTransition.elapsed / zoomTransition.duration, 1);
+          const easedProgress = progress * progress * (3 - 2 * progress);
+          const distance = THREE.MathUtils.lerp(zoomTransition.startDistance, zoomTransition.endDistance, easedProgress);
+          zoomTransition.startTarget.add(earthMovement);
+          zoomTransition.endTarget.add(earthMovement);
+          controls.target.lerpVectors(zoomTransition.startTarget, zoomTransition.endTarget, easedProgress);
+          const direction = zoomTransition.startDirection.clone().lerp(zoomTransition.endDirection, easedProgress).normalize();
+          camera.position.copy(controls.target).addScaledVector(direction, distance);
+          if (progress === 1) zoomTransition = null;
+        }
+
+        controls.update();
+        if (earthAlignment) {
+          earthAlignment.elapsed = Math.min(earthAlignment.elapsed + delta, earthAlignment.duration);
+          const progress = earthAlignment.elapsed / earthAlignment.duration;
+          const easedProgress = progress * progress * (3 - 2 * progress);
+          earth.rotation.set(
+            earthAlignment.startX + earthAlignment.deltaX * easedProgress,
+            earthAlignment.startY + earthAlignment.deltaY * easedProgress,
+            earthAlignment.startZ + earthAlignment.deltaZ * easedProgress
+          );
+          if (progress === 1) {
+            earth.rotation.set(0, earthAlignment.targetY, 0);
+            earthAlignment = null;
+          }
+        }
+        if (!earthDragActive && !countryFocusActive && !earthAlignment && autoRotationSpeed < 0.045) {
+          rotationResumeElapsed = Math.min(rotationResumeElapsed + delta, 0.7);
+          const resumeProgress = rotationResumeElapsed / 0.7;
+          autoRotationSpeed = 0.045 * resumeProgress * resumeProgress * (3 - 2 * resumeProgress);
+        }
+        earth.rotation.y += delta * autoRotationSpeed;
+        updateMercury(delta, elapsed);
+        updateVenus(delta, elapsed);
+        updateMars(delta, elapsed);
+        updateJupiter(delta, elapsed);
+        updateSaturn(delta, elapsed);
+        camera.updateMatrixWorld();
+        earth.updateWorldMatrix(true, false);
+        updateCityLabels();
+        renderer.render(scene, camera);
+      }
+      animate();
+
+      function resizeScene() {
+        const width = sceneViewport.clientWidth;
+        const height = sceneViewport.clientHeight;
+        camera.aspect = width / height;
+        camera.updateProjectionMatrix();
+        renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
+        renderer.setSize(width, height);
+      }
+      new ResizeObserver(resizeScene).observe(sceneViewport);
+      addEventListener("resize", resizeScene);
+    </script>
+  </body>
+</html>
