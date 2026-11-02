@@ -929,6 +929,7 @@
       let previousRandomCountry = "";
       let lastGeocodeRequest = 0;
       let activeSearchId = 0;
+      let activeOverpassController = null;
       const geocodeCache = new Map();
       const placePhotoCache = new Map();
 
@@ -1372,7 +1373,49 @@
       const overpassEndpoints = [
         "https://overpass-api.de/api/interpreter",
         "https://overpass.kumi.systems/api/interpreter",
+        "https://overpass.private.coffee/api/interpreter",
+        "https://overpass.nchc.org.tw/api/interpreter",
       ];
+
+      const athensFallbackPlaces = [
+        ["Acropolis of Athens", "Activities & Experiences", "Explore the hilltop citadel and its ancient monuments.", 37.9715, 23.7257],
+        ["Parthenon", "Culture & Museums", "The classical temple at the heart of the Acropolis.", 37.9715, 23.7269],
+        ["Acropolis Museum", "Culture & Museums", "Archaeology and sculpture beside the Acropolis.", 37.9684, 23.7285],
+        ["Ancient Agora", "Culture & Museums", "Walk the civic heart of ancient Athens.", 37.9747, 23.7214],
+        ["National Archaeological Museum", "Culture & Museums", "A landmark collection of Greek antiquities.", 37.9891, 23.7326],
+        ["Temple of Olympian Zeus", "Culture & Museums", "Monumental columns from one of Greece's largest ancient temples.", 37.9693, 23.7331],
+        ["Panathenaic Stadium", "Activities & Experiences", "The marble stadium of the first modern Olympic Games.", 37.9683, 23.7411],
+        ["Plaka", "Activities & Experiences", "Wander the old lanes beneath the Acropolis.", 37.9716, 23.7296],
+        ["Monastiraki Square", "Food & Restaurants", "A lively central square beside the flea market.", 37.9763, 23.7257],
+        ["Syntagma Square", "Activities & Experiences", "The city's central square and ceremonial heart.", 37.9755, 23.7348],
+        ["Philopappos Hill", "Nature & Outdoors", "A scenic walking route with Acropolis views.", 37.9655, 23.7211],
+        ["Benaki Museum", "Culture & Museums", "Greek culture and art across centuries.", 37.9755, 23.7417],
+        ["Kerameikos", "Culture & Museums", "Ancient cemetery, city walls, and archaeological museum.", 37.9780, 23.7177],
+        ["ERGON House Agora", "Food & Restaurants", "A modern food hall for Greek produce and regional bites.", 37.9760, 23.7350],
+        ["Feyrouz", "Food & Restaurants", "Eastern Mediterranean street food and filled pies.", 37.9815, 23.7278],
+        ["Taf Coffee", "Coffee & Cafes", "Specialty coffee roasted in Athens.", 37.9859, 23.7350],
+        ["Little Kook", "Coffee & Cafes", "A whimsical, elaborately themed cafe in Psyrri.", 37.9774, 23.7259],
+        ["Brettos Bar", "Nightlife & Bars", "A historic Plaka bar known for its colorful bottle wall.", 37.9694, 23.7285],
+        ["Six d.o.g.s", "Nightlife & Bars", "A courtyard bar and live-music venue in the centre.", 37.9782, 23.7261],
+      ].map(([name, category, note, latitude, longitude]) => ({
+        id: `athens-fallback-${normalizeCityName(name)}`,
+        name,
+        category,
+        note,
+        description: note,
+        address: "Athens, Greece",
+        neighborhood: "Athens",
+        latitude,
+        longitude,
+        distance: distanceBetweenKilometers(37.9838, 23.7275, latitude, longitude),
+        rating: null,
+        reviewCount: null,
+        priceLevel: null,
+        imageUrl: "",
+        googleMapsUrl: `https://www.google.com/maps/search/?api=1&query=${latitude},${longitude}`,
+        osmUrl: `https://www.openstreetmap.org/?mlat=${latitude}&mlon=${longitude}#map=18/${latitude}/${longitude}`,
+        destination: "Athens",
+      }));
 
       function normalizeOsmElement(element, latitude, longitude, cityName) {
         const tags = element.tags || {};
@@ -1411,51 +1454,86 @@
         };
       }
 
-      async function fetchOverpassPlaces(latitude, longitude, cityName, radius) {
+      function waitBeforeRetry(milliseconds, signal) {
+        return new Promise((resolve, reject) => {
+          const timer = setTimeout(resolve, milliseconds);
+          signal.addEventListener("abort", () => {
+            clearTimeout(timer);
+            reject(signal.reason || new DOMException("Search cancelled", "AbortError"));
+          }, { once: true });
+        });
+      }
+
+      function shouldRetryOverpassStatus(status) {
+        return [429, 502, 503, 504].includes(status);
+      }
+
+      async function fetchOverpassPlaces(latitude, longitude, cityName, radius, signal) {
         console.log(`Overpass request started: radius=${radius}m`, { latitude, longitude, cityName });
         const failures = [];
         for (const endpoint of overpassEndpoints) {
-          try {
-            const response = await fetch(endpoint, {
-              method: "POST",
-              headers: { "Content-Type": "text/plain;charset=UTF-8", Accept: "application/json" },
-              body: overpassQuery(latitude, longitude, radius),
-              signal: AbortSignal.timeout(30000),
-            });
-            console.log(`Overpass HTTP response (${endpoint}): ${response.status}`);
-            if (!response.ok) {
-              failures.push(`${endpoint} HTTP ${response.status}`);
-              continue;
+          for (let attempt = 1; attempt <= 3; attempt += 1) {
+            if (signal.aborted) throw signal.reason || new DOMException("Search cancelled", "AbortError");
+            console.log(`Testing Overpass endpoint: ${endpoint} (attempt ${attempt}/3)`);
+            try {
+              const response = await fetch(endpoint, {
+                method: "POST",
+                headers: { "Content-Type": "text/plain;charset=UTF-8", Accept: "application/json" },
+                body: overpassQuery(latitude, longitude, radius),
+                signal: AbortSignal.any([signal, AbortSignal.timeout(18000)]),
+              });
+              console.log(`Overpass HTTP response (${endpoint}, attempt ${attempt}): ${response.status}`);
+              if (!response.ok) {
+                failures.push(`${endpoint} HTTP ${response.status}`);
+                if (!shouldRetryOverpassStatus(response.status) || attempt === 3) break;
+                await waitBeforeRetry(400 * (2 ** (attempt - 1)), signal);
+                continue;
+              }
+              const data = await response.json();
+              const elements = Array.isArray(data.elements) ? data.elements : [];
+              console.log(`Overpass returned ${elements.length} OSM elements`);
+              const placesById = new Map();
+              for (const element of elements) {
+                const place = normalizeOsmElement(element, latitude, longitude, cityName);
+                if (place && !placesById.has(place.id)) placesById.set(place.id, place);
+              }
+              const places = [...placesById.values()].sort((first, second) => first.distance - second.distance);
+              console.log(`Overpass valid places after filtering: ${places.length}`);
+              return places;
+            } catch (error) {
+              if (signal.aborted) throw signal.reason || error;
+              const failure = error.name === "TimeoutError" || error.name === "AbortError" ? "timeout" : error.message;
+              failures.push(`${endpoint} ${failure}`);
+              console.warn(`Overpass endpoint failed: ${endpoint} ${failure}`);
+              if (attempt < 3) {
+                await waitBeforeRetry(400 * (2 ** (attempt - 1)), signal);
+              }
             }
-            const data = await response.json();
-            const elements = Array.isArray(data.elements) ? data.elements : [];
-            console.log(`Overpass returned ${elements.length} OSM elements`);
-            const placesById = new Map();
-            for (const element of elements) {
-              const place = normalizeOsmElement(element, latitude, longitude, cityName);
-              if (place && !placesById.has(place.id)) placesById.set(place.id, place);
-            }
-            const places = [...placesById.values()].sort((first, second) => first.distance - second.distance);
-            console.log(`Overpass valid places after filtering: ${places.length}`);
-            return places;
-          } catch (error) {
-            failures.push(`${endpoint} ${error.name === "TimeoutError" ? "timeout" : error.message}`);
           }
         }
         throw new Error(`Overpass API unavailable: ${failures.join("; ")}`);
       }
 
+      function isAthensDestination(cityName, countryName) {
+        const city = normalizeCityName(cityName || "");
+        const country = normalizeCityName(countryName || "");
+        return city.includes("athens") && (!country || country === "greece");
+      }
+
       async function loadCityRecommendations(latitude, longitude, cityName, countryName, cityKey, searchId) {
+        if (activeOverpassController) activeOverpassController.abort();
+        const controller = new AbortController();
+        activeOverpassController = controller;
         recommendationError = "";
         activeCityCards = [];
         activeCityCardIndex = 0;
         isLoadingCityCards = true;
         renderCityPlaceCard(searchId);
         try {
-          let places = await fetchOverpassPlaces(latitude, longitude, cityName, 12000);
+          let places = await fetchOverpassPlaces(latitude, longitude, cityName, 12000, controller.signal);
           if (!places.length) {
             console.warn("No places found within 12 km; retrying Overpass at 25 km.");
-            places = await fetchOverpassPlaces(latitude, longitude, cityName, 25000);
+            places = await fetchOverpassPlaces(latitude, longitude, cityName, 25000, controller.signal);
           }
           if (searchId !== activeSearchId || cityKey !== activeCityKey) return;
           activeCityCards = places.slice(0, 40);
@@ -1466,11 +1544,18 @@
             discoveryStatus.textContent = `Found ${activeCityCards.length} places`;
           }
         } catch (error) {
+          if (controller.signal.aborted || error.name === "AbortError") return;
           if (searchId !== activeSearchId || cityKey !== activeCityKey) return;
-          const message = error.name === "TimeoutError" ? "Overpass API timed out while finding local places." : error.message;
           console.error("Overpass discovery failed:", error);
-          recommendationError = `API ERROR: ${message}`;
-          discoveryStatus.textContent = recommendationError;
+          if (isAthensDestination(cityName, countryName)) {
+            activeCityCards = athensFallbackPlaces.filter((place) => selectedCategories.includes(place.category));
+            recommendationError = "Live search is temporarily unavailable. Showing Athens fallback places.";
+            discoveryStatus.textContent = "Fallback places shown (live search unavailable).";
+            console.warn(`Athens fallback used: ${activeCityCards.length} places`);
+          } else {
+            recommendationError = "Live place search is temporarily unavailable. Please retry.";
+            discoveryStatus.textContent = recommendationError;
+          }
         } finally {
           if (searchId === activeSearchId && cityKey === activeCityKey) {
             activeCityCardIndex = 0;
@@ -1478,6 +1563,7 @@
             console.log(`Cards rendered: ${activeCityCards.length}`);
             renderCityPlaceCard(searchId);
           }
+          if (activeOverpassController === controller) activeOverpassController = null;
         }
       }
 
