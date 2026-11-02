@@ -930,6 +930,7 @@
       let lastGeocodeRequest = 0;
       let activeSearchId = 0;
       let activeOverpassController = null;
+      let activeRecommendationToken = "";
       const geocodeCache = new Map();
       const placePhotoCache = new Map();
 
@@ -984,7 +985,19 @@
       }
 
       function normalizeCityName(name) {
-        return name.normalize("NFKD").replace(/[\u0300-\u036f]/g, "").toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "");
+        const source = String(name || "").trim().normalize("NFKD").replace(/[\u0300-\u036f]/g, "").toLowerCase();
+        const aliases = {
+          "αθηνα": "athens",
+          "αθήνα": "athens",
+          athina: "athens",
+          athena: "athens",
+          athens: "athens",
+          ελλαδα: "greece",
+          ελλάδα: "greece",
+          ellada: "greece",
+          greece: "greece",
+        };
+        return aliases[source] || source.replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "");
       }
 
       function getCityFavoriteState(cityKey) {
@@ -1193,6 +1206,7 @@
         const card = availableCards[activeCityCardIndex];
         polaroidSlot.replaceChildren();
         activeCardElement = null;
+        console.log(`Cards rendered: ${card ? 1 : 0} (available=${availableCards.length}, total=${activeCityCards.length})`);
 
         if (!card) {
           placeActions.remove();
@@ -1417,6 +1431,17 @@
         destination: "Athens",
       }));
 
+      function getAthensFallbackPlaces() {
+        const placesById = new Map();
+        for (const place of athensFallbackPlaces) {
+          const valid = place.name && Number.isFinite(place.latitude) && Number.isFinite(place.longitude) && selectedCategories.includes(place.category);
+          if (valid && !placesById.has(place.id)) placesById.set(place.id, place);
+        }
+        const places = [...placesById.values()];
+        console.log(`Athens fallback entries: ${athensFallbackPlaces.length}; valid fallback entries: ${places.length}`);
+        return places;
+      }
+
       function normalizeOsmElement(element, latitude, longitude, cityName) {
         const tags = element.tags || {};
         const name = tags.name?.trim();
@@ -1472,20 +1497,20 @@
         console.log(`Overpass request started: radius=${radius}m`, { latitude, longitude, cityName });
         const failures = [];
         for (const endpoint of overpassEndpoints) {
-          for (let attempt = 1; attempt <= 3; attempt += 1) {
+          for (let attempt = 1; attempt <= 2; attempt += 1) {
             if (signal.aborted) throw signal.reason || new DOMException("Search cancelled", "AbortError");
-            console.log(`Testing Overpass endpoint: ${endpoint} (attempt ${attempt}/3)`);
+            console.log(`Testing Overpass endpoint: ${endpoint} (attempt ${attempt}/2)`);
             try {
               const response = await fetch(endpoint, {
                 method: "POST",
                 headers: { "Content-Type": "text/plain;charset=UTF-8", Accept: "application/json" },
                 body: overpassQuery(latitude, longitude, radius),
-                signal: AbortSignal.any([signal, AbortSignal.timeout(18000)]),
+                signal: AbortSignal.any([signal, AbortSignal.timeout(15000)]),
               });
               console.log(`Overpass HTTP response (${endpoint}, attempt ${attempt}): ${response.status}`);
               if (!response.ok) {
                 failures.push(`${endpoint} HTTP ${response.status}`);
-                if (!shouldRetryOverpassStatus(response.status) || attempt === 3) break;
+                if (!shouldRetryOverpassStatus(response.status) || attempt === 2) break;
                 await waitBeforeRetry(400 * (2 ** (attempt - 1)), signal);
                 continue;
               }
@@ -1505,7 +1530,7 @@
               const failure = error.name === "TimeoutError" || error.name === "AbortError" ? "timeout" : error.message;
               failures.push(`${endpoint} ${failure}`);
               console.warn(`Overpass endpoint failed: ${endpoint} ${failure}`);
-              if (attempt < 3) {
+              if (attempt < 2) {
                 await waitBeforeRetry(400 * (2 ** (attempt - 1)), signal);
               }
             }
@@ -1521,13 +1546,25 @@
       }
 
       async function loadCityRecommendations(latitude, longitude, cityName, countryName, cityKey, searchId) {
+        const requestToken = `${searchId}|${cityKey}`;
+        if (activeOverpassController && activeRecommendationToken === requestToken) {
+          console.warn("Duplicate place search ignored:", requestToken);
+          return;
+        }
         if (activeOverpassController) activeOverpassController.abort();
         const controller = new AbortController();
         activeOverpassController = controller;
+        activeRecommendationToken = requestToken;
+        const athensDetected = isAthensDestination(cityName, countryName);
+        const fallbackPlaces = athensDetected ? getAthensFallbackPlaces() : [];
         recommendationError = "";
-        activeCityCards = [];
+        activeCityCards = fallbackPlaces;
         activeCityCardIndex = 0;
-        isLoadingCityCards = true;
+        isLoadingCityCards = !fallbackPlaces.length;
+        if (fallbackPlaces.length) {
+          discoveryStatus.textContent = "Showing Athens fallback while live search runs.";
+          console.log(`Fallback data is being displayed: ${fallbackPlaces.length} cards`);
+        }
         renderCityPlaceCard(searchId);
         try {
           let places = await fetchOverpassPlaces(latitude, longitude, cityName, 12000, controller.signal);
@@ -1536,19 +1573,22 @@
             places = await fetchOverpassPlaces(latitude, longitude, cityName, 25000, controller.signal);
           }
           if (searchId !== activeSearchId || cityKey !== activeCityKey) return;
-          activeCityCards = places.slice(0, 40);
-          if (!activeCityCards.length) {
+          if (places.length) {
+            activeCityCards = places.slice(0, 40);
+            console.log(`Live data is being displayed: ${activeCityCards.length} cards`);
+          }
+          if (!places.length && !fallbackPlaces.length) {
             recommendationError = "No places found for this destination.";
             discoveryStatus.textContent = recommendationError;
-          } else {
+          } else if (places.length) {
             discoveryStatus.textContent = `Found ${activeCityCards.length} places`;
           }
         } catch (error) {
           if (controller.signal.aborted || error.name === "AbortError") return;
           if (searchId !== activeSearchId || cityKey !== activeCityKey) return;
           console.error("Overpass discovery failed:", error);
-          if (isAthensDestination(cityName, countryName)) {
-            activeCityCards = athensFallbackPlaces.filter((place) => selectedCategories.includes(place.category));
+          if (athensDetected) {
+            activeCityCards = fallbackPlaces.length ? fallbackPlaces : getAthensFallbackPlaces();
             recommendationError = "Live search is temporarily unavailable. Showing Athens fallback places.";
             discoveryStatus.textContent = "Fallback places shown (live search unavailable).";
             console.warn(`Athens fallback used: ${activeCityCards.length} places`);
