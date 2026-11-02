@@ -161,6 +161,13 @@
       .panel-kicker { color: var(--accent); font: 10px ui-monospace, monospace; letter-spacing: 0.09em; text-transform: uppercase; }
       .panel-title { margin: 10px 0 7px; font-size: clamp(26px, 3vw, 38px); font-weight: 550; line-height: 1.08; }
       .panel-subtitle { margin: 0; color: #b6c3cb; font-size: 13px; line-height: 1.55; }
+        .discovery-toolbar { margin-top: 20px; }
+        .discovery-toolbar-label { display: block; margin-bottom: 8px; color: var(--muted); font: 9px ui-monospace, monospace; letter-spacing: .06em; text-transform: uppercase; }
+        .category-filters { display: flex; flex-wrap: wrap; gap: 6px; }
+        .category-filter { padding: 6px 8px; border: 1px solid var(--line); border-radius: 999px; background: rgba(255,255,255,.035); color: #b9c9cf; font: 10px system-ui, sans-serif; cursor: pointer; transition: background 160ms ease, border-color 160ms ease, color 160ms ease; }
+        .category-filter[aria-pressed="true"] { border-color: rgba(158, 213, 206, .72); background: rgba(158, 213, 206, .16); color: var(--accent); }
+        .discovery-progress { display: flex; justify-content: space-between; margin-top: 12px; color: var(--muted); font: 10px ui-monospace, monospace; }
+        .discovery-status { min-height: 18px; margin-top: 8px; color: var(--accent); font: 10px/1.4 ui-monospace, monospace; }
       .panel-rule { height: 1px; margin: 22px 0; border: 0; background: var(--line); }
       .detail-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 14px 10px; }
       .detail-label { display: block; margin-bottom: 5px; color: var(--muted); font: 9px ui-monospace, monospace; letter-spacing: 0.06em; text-transform: uppercase; }
@@ -174,6 +181,9 @@
       .places-heading h2, .saved-heading { margin: 0; font-size: 14px; font-weight: 550; }
       .places-city { color: var(--muted); font: 9px ui-monospace, monospace; text-transform: uppercase; }
       .polaroid { padding: 9px 9px 13px; border-radius: 4px; background: #e9e7dc; color: #172229; box-shadow: 0 12px 30px rgba(0,0,0,.24); transform: rotate(-1deg); transition: transform 280ms ease; }
+        .polaroid.is-dragging { transition: none; cursor: grabbing; }
+        .polaroid.swipe-liked { transform: translate(130%, -5%) rotate(18deg); opacity: 0; }
+        .polaroid.swipe-disliked { transform: translate(-130%, -5%) rotate(-18deg); opacity: 0; }
       .polaroid:hover { transform: rotate(0deg) translateY(-2px); }
       .polaroid-image { position: relative; overflow: hidden; aspect-ratio: 1.18; background: #16232b; }
       .polaroid-image img { display: block; width: 100%; height: 100%; object-fit: cover; }
@@ -183,6 +193,11 @@
       .place-category { color: #65777a; font: 9px ui-monospace, monospace; letter-spacing: .06em; text-transform: uppercase; }
       .place-name { margin: 4px 0 3px; font: 600 18px/1.2 system-ui, sans-serif; }
       .place-note { margin: 0; color: #46575a; font-size: 11px; line-height: 1.4; }
+        .place-meta { display: flex; flex-wrap: wrap; gap: 7px; margin-top: 8px; color: #536366; font: 10px ui-monospace, monospace; }
+        .place-meta span { padding-right: 7px; border-right: 1px solid rgba(23,34,41,.18); }
+        .place-meta span:last-child { padding-right: 0; border-right: 0; }
+        .place-map { display: inline-flex; margin-top: 10px; color: #315d62; font: 600 10px system-ui, sans-serif; text-decoration: none; }
+        .place-map:hover { text-decoration: underline; }
       .place-actions { display: flex; justify-content: center; gap: 14px; margin: 14px 0 18px; }
       .place-action { display: grid; width: 44px; height: 44px; place-items: center; border: 1px solid var(--line); border-radius: 50%; background: rgba(255,255,255,.035); color: var(--ink); font-size: 21px; cursor: pointer; transition: transform 160ms ease, border-color 160ms ease, background 160ms ease; }
       .place-action:hover { transform: translateY(-2px); }
@@ -194,7 +209,16 @@
       .polaroid .place-action[data-decision="liked"] { color: #bf4c58; }
       .polaroid .place-action[data-decision="disliked"] { color: #526a76; }
       .place-empty { padding: 17px 14px; border: 1px dashed var(--line); border-radius: 4px; color: var(--muted); font-size: 12px; line-height: 1.5; }
+      .discovery-actions { display: flex; flex-wrap: wrap; gap: 7px; margin-top: 12px; }
+      .discovery-action { padding: 7px 9px; border: 1px solid var(--line); border-radius: 3px; background: rgba(255,255,255,.045); color: var(--ink); font: 10px system-ui, sans-serif; cursor: pointer; }
+      .discovery-action:hover { border-color: var(--accent); color: var(--accent); }
       .saved-section { padding-top: 15px; border-top: 1px solid var(--line); }
+        .wishlist-section { margin-top: 18px; padding-top: 15px; border-top: 1px solid var(--line); }
+        .wishlist-list { display: grid; gap: 8px; margin-top: 10px; }
+        .wishlist-item { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 8px; border: 1px solid var(--line); border-radius: 4px; color: #dce5e8; font-size: 11px; }
+        .wishlist-item a { color: var(--accent); text-decoration: none; }
+        .wishlist-remove { border: 0; background: transparent; color: var(--muted); cursor: pointer; font-size: 16px; }
+        .wishlist-remove:hover { color: #ff9a9a; }
       .saved-groups { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; margin-top: 12px; }
       .saved-group-title { display: flex; justify-content: space-between; margin-bottom: 7px; color: var(--muted); font: 9px ui-monospace, monospace; text-transform: uppercase; }
       .saved-list { display: flex; flex-wrap: wrap; gap: 5px; min-height: 22px; }
@@ -224,7 +248,8 @@
       </div>
     </div>
     <form class="search-dock" id="location-search-form" role="search">
-      <input class="search-input" id="location-search" type="search" placeholder="Search a city or country" aria-label="Search a city or country" autocomplete="off" />
+      <input class="search-input" id="location-search" type="search" list="destination-suggestions" placeholder="Search a city or country" aria-label="Search a city or country" autocomplete="off" />
+      <datalist id="destination-suggestions"></datalist>
       <button class="search-button" id="location-search-button" type="submit">Explore</button>
       <button class="random-button" id="random-destination" type="button">🎲 Random Destination</button>
     </form>
@@ -233,6 +258,12 @@
         <div class="panel-kicker" id="panel-kicker">Location guide</div>
         <h1 class="panel-title" id="panel-title">Explore the world</h1>
         <p class="panel-subtitle" id="panel-subtitle">Search for a place to focus the globe and see local highlights.</p>
+        <div class="discovery-toolbar" aria-label="Experience categories">
+          <span class="discovery-toolbar-label">Discover by category</span>
+          <div class="category-filters" id="category-filters"></div>
+          <div class="discovery-progress"><span id="discovery-progress-label">Choose a destination</span><span id="wishlist-shortcut">Wishlist 0</span></div>
+          <div class="discovery-status" id="discovery-status" role="status" aria-live="polite">Ready to discover real places.</div>
+        </div>
         <section class="city-places" id="city-places" hidden aria-label="City recommendations">
           <div class="places-heading"><h2>Polaroid picks</h2><span class="places-city" id="places-city"></span></div>
           <div class="polaroid-slot" id="polaroid-slot"></div>
@@ -242,6 +273,10 @@
               <div><div class="saved-group-title">Liked <span id="liked-count">0</span></div><div class="saved-list" id="liked-places"></div></div>
               <div><div class="saved-group-title">Passed <span id="disliked-count">0</span></div><div class="saved-list" id="disliked-places"></div></div>
             </div>
+          </div>
+          <div class="wishlist-section">
+            <h2 class="saved-heading">My Travel Wishlist</h2>
+            <div class="wishlist-list" id="wishlist-list"></div>
           </div>
         </section>
         <h2 class="facts-heading">Useful information · Χρήσιμες πληροφορίες</h2>
@@ -815,6 +850,7 @@
 
       const locationSearchForm = document.querySelector("#location-search-form");
       const locationSearchInput = document.querySelector("#location-search");
+      const destinationSuggestions = document.querySelector("#destination-suggestions");
       const locationSearchButton = document.querySelector("#location-search-button");
       const randomDestinationButton = document.querySelector("#random-destination");
       const panelKicker = document.querySelector("#panel-kicker");
@@ -824,6 +860,11 @@
       const cityPlacesPanel = document.querySelector("#city-places");
       const placesCityLabel = document.querySelector("#places-city");
       const polaroidSlot = document.querySelector("#polaroid-slot");
+      const categoryFilters = document.querySelector("#category-filters");
+      const discoveryProgressLabel = document.querySelector("#discovery-progress-label");
+      const discoveryStatus = document.querySelector("#discovery-status");
+      const wishlistShortcut = document.querySelector("#wishlist-shortcut");
+      const wishlistList = document.querySelector("#wishlist-list");
       const placeActions = document.createElement("div");
       placeActions.className = "place-actions";
       const placeDislikeButton = document.createElement("button");
@@ -845,7 +886,13 @@
       const likedCountElement = document.querySelector("#liked-count");
       const dislikedCountElement = document.querySelector("#disliked-count");
       const cityFavoritesStorageKey = "orbit-earth-city-favorites-v1";
+      const wishlistStorageKey = "orbit-earth-wishlist-v1";
+      const categoriesStorageKey = "orbit-earth-categories-v1";
       const worldCitiesUrl = "https://raw.githubusercontent.com/datasets/world-cities/master/data/world-cities.csv";
+      const experienceCategories = [
+        "Food & Restaurants", "Coffee & Cafes", "Nightlife & Bars", "Nature & Outdoors",
+        "Activities & Experiences", "Culture & Museums", "Hidden Gems", "Relax & Chill",
+      ];
       let cityFavorites = {};
       try {
         const storedFavorites = JSON.parse(localStorage.getItem(cityFavoritesStorageKey) || "{}");
@@ -861,6 +908,22 @@
       let activeCityCards = [];
       let activeCityCardIndex = 0;
       let isLoadingCityCards = false;
+      let activeDestinationCoordinates = null;
+      let isCardAnimating = false;
+      let activeCardElement = null;
+      let cardPointerStart = null;
+      let cardPointerDelta = 0;
+      let recommendationError = "";
+      let wishlistPlaces = [];
+      let selectedCategories = experienceCategories.slice();
+      try {
+        const storedWishlist = JSON.parse(localStorage.getItem(wishlistStorageKey) || "[]");
+        wishlistPlaces = Array.isArray(storedWishlist) ? storedWishlist : [];
+        const storedCategories = JSON.parse(localStorage.getItem(categoriesStorageKey) || "null");
+        if (Array.isArray(storedCategories) && storedCategories.length) selectedCategories = storedCategories.filter((category) => experienceCategories.includes(category));
+      } catch {
+        wishlistPlaces = [];
+      }
       let globalCityRecordsPromise = null;
       let previousRandomCityId = "";
       let previousRandomCountry = "";
@@ -868,38 +931,6 @@
       let activeSearchId = 0;
       const geocodeCache = new Map();
       const placePhotoCache = new Map();
-      const athensRecommendations = [
-        { id: "athens-acropolis", name: "Acropolis of Athens", category: "Essential sightseeing", note: "Explore the hilltop citadel and its ancient monuments.", latitude: 37.9715, longitude: 23.7257 },
-        { id: "athens-parthenon", name: "Parthenon", category: "Essential sightseeing", note: "The classical temple at the heart of the Acropolis.", latitude: 37.9715, longitude: 23.7269 },
-        { id: "athens-acropolis-museum", name: "Acropolis Museum", category: "Essential sightseeing", note: "Archaeology and sculpture beside the Acropolis.", latitude: 37.9684, longitude: 23.7285 },
-        { id: "athens-ancient-agora", name: "Ancient Agora", category: "Essential sightseeing", note: "Walk the civic heart of ancient Athens.", latitude: 37.9747, longitude: 23.7214 },
-        { id: "athens-national-archaeological", name: "National Archaeological Museum", category: "Essential sightseeing", note: "A landmark collection of Greek antiquities.", latitude: 37.9891, longitude: 23.7326 },
-        { id: "athens-emst", name: "National Museum of Contemporary Art (EMST)", category: "Essential sightseeing", note: "Contemporary Greek and international art in a former brewery.", latitude: 37.9687, longitude: 23.7124 },
-        { id: "athens-olympian-zeus", name: "Temple of Olympian Zeus", category: "Essential sightseeing", note: "Monumental columns from one of Greece's largest ancient temples.", latitude: 37.9693, longitude: 23.7331 },
-        { id: "athens-panathenaic", name: "Panathenaic Stadium", category: "Essential sightseeing", note: "The marble stadium of the first modern Olympic Games.", latitude: 37.9683, longitude: 23.7411 },
-        { id: "athens-plaka", name: "Plaka", category: "Essential sightseeing", note: "Wander the old lanes beneath the Acropolis.", latitude: 37.9716, longitude: 23.7296 },
-        { id: "athens-monastiraki", name: "Monastiraki Square", category: "Essential sightseeing", note: "A lively central square beside the flea market.", latitude: 37.9763, longitude: 23.7257 },
-        { id: "athens-syntagma", name: "Syntagma Square", category: "Essential sightseeing", note: "The city's central square and ceremonial heart.", latitude: 37.9755, longitude: 23.7348 },
-        { id: "athens-philopappos", name: "Philopappos Hill", category: "Essential sightseeing", note: "A scenic walking route with Acropolis views.", latitude: 37.9655, longitude: 23.7211 },
-        { id: "athens-benaki", name: "Benaki Museum", category: "Essential sightseeing", note: "Greek culture and art across centuries.", latitude: 37.9755, longitude: 23.7417 },
-        { id: "athens-kerameikos", name: "Kerameikos", category: "Essential sightseeing", note: "Ancient cemetery, city walls, and archaeological museum.", latitude: 37.9780, longitude: 23.7177 },
-        { id: "athens-sounio", name: "Cape Sounion & Temple of Poseidon", category: "Essential sightseeing", note: "A coastal day trip to the temple above the Aegean.", latitude: 37.6506, longitude: 24.0244 },
-        { id: "athens-psarades", name: "Psarades / Psaras Taverna", category: "Local food", note: "Seafood and Greek taverna dishes in the Plaka area.", latitude: 37.9734, longitude: 23.7254 },
-        { id: "athens-feyrouz", name: "Feyrouz", category: "Local food", note: "Eastern Mediterranean street food and filled pies.", latitude: 37.9815, longitude: 23.7278 },
-        { id: "athens-ergon", name: "ERGON House Agora", category: "Local food", note: "A modern food hall for Greek produce and regional bites.", latitude: 37.9760, longitude: 23.7350 },
-        { id: "athens-mokka", name: "Mokka", category: "Local food", note: "Traditional coffee and a classic central-market stop.", latitude: 37.9818, longitude: 23.7277 },
-        { id: "athens-katsanveba", name: "Taverna To Katsanveba", category: "Traditional restaurant", note: "A neighborhood-style Greek taverna experience.", latitude: 37.9842, longitude: 23.7260 },
-        { id: "athens-diporto", name: "Diporto", category: "Traditional restaurant", note: "A storied market-area tavern serving homestyle dishes.", latitude: 37.9825, longitude: 23.7278 },
-        { id: "athens-klimataria", name: "Klimataria", category: "Traditional restaurant", note: "Traditional Greek cooking in a lively historic dining room.", latitude: 37.9836, longitude: 23.7250 },
-        { id: "athens-varoulko", name: "Varoulko Seaside", category: "Traditional restaurant", note: "Greek seafood dining by the water at Mikrolimano.", latitude: 37.9383, longitude: 23.6435 },
-        { id: "athens-nolan", name: "Nolan", category: "Traditional restaurant", note: "Contemporary Greek cooking with international influences.", latitude: 37.9759, longitude: 23.7356 },
-        { id: "athens-kuki", name: "Kuki", category: "Café", note: "A playful local café stop near the historic centre.", latitude: 37.9750, longitude: 23.7270 },
-        { id: "athens-equi", name: "Equi", category: "Café", note: "A relaxed coffee and café stop in central Athens.", latitude: 37.9785, longitude: 23.7355 },
-        { id: "athens-little-kook", name: "Little Kook", category: "Café", note: "A whimsical, elaborately themed café in Psyrri.", latitude: 37.9774, longitude: 23.7259 },
-        { id: "athens-taf", name: "Taf Coffee", category: "Café", note: "Specialty coffee roasted in Athens.", latitude: 37.9859, longitude: 23.7350 },
-        { id: "athens-brettos", name: "Brettos Bar", category: "Nightlife", note: "A historic Plaka bar known for its colorful bottle wall.", latitude: 37.9694, longitude: 23.7285 },
-        { id: "athens-six-dogs", name: "Six d.o.g.s", category: "Nightlife", note: "A courtyard bar and live-music venue in the centre.", latitude: 37.9782, longitude: 23.7261 },
-      ];
 
       function findCountryForGeocode(result) {
         const polygonMatch = findCountry(Number(result.lon), Number(result.lat));
@@ -994,8 +1025,92 @@
         fillSavedList(dislikedPlacesElement, dislikedCountElement, state.disliked, "No passes yet");
       }
 
+      function persistWishlist() {
+        try { localStorage.setItem(wishlistStorageKey, JSON.stringify(wishlistPlaces)); } catch (error) { console.warn("Could not save wishlist:", error); }
+      }
+
+      function renderWishlist() {
+        wishlistList.replaceChildren();
+        wishlistShortcut.textContent = `Wishlist ${wishlistPlaces.length}`;
+        if (!wishlistPlaces.length) {
+          const empty = document.createElement("span");
+          empty.className = "saved-none";
+          empty.textContent = "Liked places will appear here";
+          wishlistList.append(empty);
+          return;
+        }
+        for (const place of wishlistPlaces) {
+          const item = document.createElement("div");
+          item.className = "wishlist-item";
+          const link = document.createElement("a");
+          link.href = place.googleMapsUrl || "#";
+          link.target = "_blank";
+          link.rel = "noreferrer";
+          link.textContent = `${place.name} · ${place.destination}`;
+          const remove = document.createElement("button");
+          remove.className = "wishlist-remove";
+          remove.type = "button";
+          remove.setAttribute("aria-label", `Remove ${place.name} from wishlist`);
+          remove.textContent = "×";
+          remove.addEventListener("click", () => {
+            wishlistPlaces = wishlistPlaces.filter((savedPlace) => savedPlace.id !== place.id);
+            persistWishlist();
+            renderWishlist();
+          });
+          item.append(link, remove);
+          wishlistList.append(item);
+        }
+      }
+
+      function renderCategoryFilters() {
+        categoryFilters.replaceChildren();
+        for (const category of experienceCategories) {
+          const button = document.createElement("button");
+          button.className = "category-filter";
+          button.type = "button";
+          button.textContent = category;
+          button.setAttribute("aria-pressed", String(selectedCategories.includes(category)));
+          button.addEventListener("click", () => {
+            if (selectedCategories.includes(category)) {
+              if (selectedCategories.length === 1) return;
+              selectedCategories = selectedCategories.filter((selected) => selected !== category);
+            } else {
+              selectedCategories = [...selectedCategories, category];
+            }
+            localStorage.setItem(categoriesStorageKey, JSON.stringify(selectedCategories));
+            renderCategoryFilters();
+            if (activeDestinationCoordinates) {
+              const searchId = ++activeSearchId;
+              activeCityCards = [];
+              activeCityCardIndex = 0;
+              isLoadingCityCards = true;
+              renderCityPlaceCard(searchId);
+              void loadCityRecommendations(
+                activeDestinationCoordinates.latitude,
+                activeDestinationCoordinates.longitude,
+                activeCityName,
+                activeCountryName,
+                activeCityKey,
+                searchId,
+              );
+            }
+          });
+          categoryFilters.append(button);
+        }
+      }
+
+      renderCategoryFilters();
+      renderWishlist();
+
       async function loadPlaceCardImage(card, image, cityKey, searchId) {
         const cacheKey = `${cityKey}|${card.id}`;
+        if (card.imageUrl) {
+          image.src = card.imageUrl;
+          image.hidden = false;
+          image.nextElementSibling.hidden = true;
+          placePhotoCache.set(cacheKey, card.imageUrl);
+          return;
+        }
         if (placePhotoCache.has(cacheKey)) {
           const cachedUrl = placePhotoCache.get(cacheKey);
           if (cachedUrl) {
@@ -1030,6 +1145,21 @@
             imageUrl = relevantPage?.imageinfo?.[0]?.thumburl || relevantPage?.imageinfo?.[0]?.url || "";
           }
 
+          if (!imageUrl && Number.isFinite(card.latitude) && Number.isFinite(card.longitude)) {
+            const nearbyParams = new URLSearchParams({
+              action: "query", format: "json", generator: "geosearch",
+              ggsprimary: "all", ggslat: String(card.latitude), ggslon: String(card.longitude),
+              ggsradius: "10000", ggslimit: "12", prop: "imageinfo", iiprop: "url", iiurlwidth: "1200", origin: "*",
+            });
+            const nearbyResponse = await fetch(`https://commons.wikimedia.org/w/api.php?${nearbyParams}`, { signal: AbortSignal.timeout(12000) });
+            if (nearbyResponse.ok) {
+              const nearbyData = await nearbyResponse.json();
+              const nearbyPage = Object.values(nearbyData.query?.pages || {})
+                .find((page) => page.imageinfo?.[0]?.thumburl || page.imageinfo?.[0]?.url);
+              imageUrl = nearbyPage?.imageinfo?.[0]?.thumburl || nearbyPage?.imageinfo?.[0]?.url || "";
+            }
+          }
+
           placePhotoCache.set(cacheKey, imageUrl || null);
           if (!imageUrl) {
             if (searchId === activeSearchId && image.isConnected) {
@@ -1061,6 +1191,7 @@
         const availableCards = activeCityCards.filter((card) => !decided.has(card.id));
         const card = availableCards[activeCityCardIndex];
         polaroidSlot.replaceChildren();
+        activeCardElement = null;
 
         if (!card) {
           placeActions.remove();
@@ -1070,8 +1201,48 @@
             ? `Finding nearby attractions, restaurants, and cafes in ${activeCityName}...`
             : activeCityCards.length
             ? `You've reviewed all ${activeCityCards.length} picks for ${activeCityName}. Your choices are saved only for this city.`
-            : `No nearby places were found for ${activeCityName}. Try another location.`;
+            : recommendationError || `No nearby places were found for ${activeCityName}. Try another location.`;
           polaroidSlot.append(empty);
+          if (!isLoadingCityCards && !activeCityCards.length) {
+            const retryButton = document.createElement("button");
+            retryButton.className = "discovery-action";
+            retryButton.type = "button";
+            retryButton.textContent = "Retry discovery";
+            retryButton.addEventListener("click", () => {
+              const retrySearchId = ++activeSearchId;
+              recommendationError = "";
+              activeCityCards = [];
+              isLoadingCityCards = true;
+              renderCityPlaceCard(retrySearchId);
+              void loadCityRecommendations(activeDestinationCoordinates.latitude, activeDestinationCoordinates.longitude, activeCityName, activeCountryName, activeCityKey, retrySearchId);
+            });
+            polaroidSlot.append(retryButton);
+          }
+          if (!isLoadingCityCards && activeCityCards.length) {
+            const actions = document.createElement("div");
+            actions.className = "discovery-actions";
+            const wishlistButton = document.createElement("button");
+            wishlistButton.className = "discovery-action";
+            wishlistButton.type = "button";
+            wishlistButton.textContent = "Review wishlist";
+            wishlistButton.addEventListener("click", () => wishlistList.scrollIntoView({ behavior: "smooth", block: "center" }));
+            const moreButton = document.createElement("button");
+            moreButton.className = "discovery-action";
+            moreButton.type = "button";
+            moreButton.textContent = "Discover more";
+            moreButton.addEventListener("click", () => {
+              activeCityCards = activeCityCards.filter((availableCard) => !decided.has(availableCard.id));
+              activeCityCardIndex = 0;
+              renderCityPlaceCard(searchId);
+            });
+            const changeButton = document.createElement("button");
+            changeButton.className = "discovery-action";
+            changeButton.type = "button";
+            changeButton.textContent = "Change destination";
+            changeButton.addEventListener("click", () => locationSearchInput.focus());
+            actions.append(wishlistButton, moreButton, changeButton);
+            polaroidSlot.append(actions);
+          }
           placeLikeButton.disabled = true;
           placeDislikeButton.disabled = true;
           renderSavedCityPlaces();
@@ -1102,12 +1273,42 @@
         name.textContent = card.name;
         const note = document.createElement("p");
         note.className = "place-note";
-        note.textContent = card.note;
-        copy.append(category, name, note);
+        note.textContent = card.description || card.note || "A place worth discovering in this destination.";
+        const meta = document.createElement("div");
+        meta.className = "place-meta";
+        const metadata = [
+          card.rating ? `★ ${card.rating}${card.reviewCount ? ` (${card.reviewCount.toLocaleString()})` : ""}` : "No rating",
+          card.priceLevel ? card.priceLevel.replace("PRICE_LEVEL_", "").replaceAll("_", " ") : "Price unavailable",
+          card.neighborhood || card.address || "Location unavailable",
+        ];
+        for (const value of metadata) {
+          const item = document.createElement("span");
+          item.textContent = value;
+          meta.append(item);
+        }
+        const mapLink = document.createElement("a");
+        mapLink.className = "place-map";
+        mapLink.href = card.googleMapsUrl || `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(`${card.name}, ${activeCityName}`)}`;
+        mapLink.target = "_blank";
+        mapLink.rel = "noreferrer";
+        mapLink.textContent = "Open in Google Maps ↗";
+        copy.append(category, name, note, meta, mapLink);
+        if (card.osmUrl) {
+          const osmLink = document.createElement("a");
+          osmLink.className = "place-map";
+          osmLink.href = card.osmUrl;
+          osmLink.target = "_blank";
+          osmLink.rel = "noreferrer";
+          osmLink.textContent = "View OpenStreetMap ↗";
+          copy.append(osmLink);
+        }
         cardElement.append(imageFrame, copy, placeActions);
         polaroidSlot.append(cardElement);
+        activeCardElement = cardElement;
+        attachCardSwipe(cardElement);
         placeLikeButton.disabled = false;
         placeDislikeButton.disabled = false;
+        discoveryProgressLabel.textContent = `${activeCityCards.length - availableCards.indexOf(card)} of ${activeCityCards.length} places`;
         renderSavedCityPlaces();
         void loadPlaceCardImage(card, image, activeCityKey, searchId);
       }
@@ -1120,10 +1321,12 @@
         const countryCode = (address.country_code || "").toLowerCase();
         activeCityName = cityName;
         activeCountryName = address.country || "";
+        activeDestinationCoordinates = { latitude: Number(result.lat), longitude: Number(result.lon) };
         activeCityKey = `${normalizeCityName(cityName)}|${countryCode}`;
         activeCityCards = [];
         activeCityCardIndex = 0;
         isLoadingCityCards = true;
+        discoveryStatus.textContent = "Searching for real places...";
         cityPlacesPanel.hidden = false;
         placesCityLabel.textContent = cityName;
         savedCityName.textContent = cityName;
@@ -1146,106 +1349,136 @@
         return 6371 * 2 * Math.atan2(Math.sqrt(haversine), Math.sqrt(1 - haversine));
       }
 
-      function categoryForPhotonFeature(properties, queryCategory) {
-        if (properties.osm_key === "amenity" && properties.osm_value === "cafe") return "Café";
-        if (properties.osm_key === "amenity" && ["restaurant", "fast_food", "food_court"].includes(properties.osm_value)) return "Traditional restaurant";
-        if (properties.osm_key === "amenity" && properties.osm_value === "marketplace") return "Local food";
-        if (properties.osm_key === "shop" && ["deli", "bakery", "confectionery", "greengrocer"].includes(properties.osm_value)) return "Local food";
-        if (properties.osm_key === "amenity" && ["bar", "pub", "nightclub", "music_venue"].includes(properties.osm_value)) return "Nightlife";
-        if (properties.osm_key === "tourism" && ["museum", "attraction", "gallery", "artwork", "viewpoint", "zoo", "aquarium", "theme_park"].includes(properties.osm_value)) return "Essential sightseeing";
-        if (properties.osm_key === "historic" && ["monument", "memorial", "castle", "archaeological_site", "ruins", "fort"].includes(properties.osm_value)) return "Essential sightseeing";
-        if (queryCategory === "sight" && properties.osm_key === "man_made" && ["tower", "obelisk", "lighthouse"].includes(properties.osm_value)) return "Essential sightseeing";
+      function categoryForOsmTags(tags) {
+        const amenity = tags.amenity;
+        const tourism = tags.tourism;
+        const leisure = tags.leisure;
+        const historic = tags.historic;
+        const shop = tags.shop;
+        if (amenity === "cafe") return "Coffee & Cafes";
+        if (["restaurant", "fast_food", "food_court", "marketplace", "biergarten"].includes(amenity) || ["bakery", "deli", "confectionery", "greengrocer", "supermarket"].includes(shop)) return "Food & Restaurants";
+        if (["bar", "pub", "nightclub", "music_venue"].includes(amenity)) return "Nightlife & Bars";
+        if (["museum", "gallery"].includes(tourism) || historic) return "Culture & Museums";
+        if (["park", "garden", "nature_reserve", "golf_course"].includes(leisure) || ["viewpoint", "beach"].includes(tourism)) return "Nature & Outdoors";
+        if (["attraction", "theme_park", "zoo", "aquarium", "arts_centre"].includes(tourism) || ["sports_centre", "stadium"].includes(leisure)) return "Activities & Experiences";
+        if (shop) return "Hidden Gems";
         return null;
       }
 
-      async function searchPhotonCategory(category, latitude, longitude) {
-        const url = new URL("https://photon.komoot.io/api/");
-        url.searchParams.set("q", category);
-        url.searchParams.set("lat", String(latitude));
-        url.searchParams.set("lon", String(longitude));
-        url.searchParams.set("limit", "50");
-        url.searchParams.set("lang", "en");
-        const response = await fetch(url, { signal: AbortSignal.timeout(12000) });
-        if (!response.ok) return [];
-        const data = await response.json();
-        return data.features || [];
+      function overpassQuery(latitude, longitude, radius) {
+        return `[out:json][timeout:25];(nwr(around:${radius},${latitude},${longitude})[name][amenity~"restaurant|cafe|bar|pub|nightclub|music_venue|fast_food|food_court|biergarten|marketplace"];nwr(around:${radius},${latitude},${longitude})[name][tourism~"museum|attraction|gallery|viewpoint|theme_park|zoo|aquarium|arts_centre|beach"];nwr(around:${radius},${latitude},${longitude})[name][leisure~"park|garden|nature_reserve|golf_course|sports_centre|stadium|water_park"];nwr(around:${radius},${latitude},${longitude})[name][historic~"archaeological_site|castle|fort|memorial|monument|ruins|wayside_shrine|boundary_stone|manor|palace|city_gate"];nwr(around:${radius},${latitude},${longitude})[name][shop~"bakery|deli|confectionery|greengrocer|supermarket|department_store|gift|books|clothes|craft"];);out center tags;`;
+      }
+
+      const overpassEndpoints = [
+        "https://overpass-api.de/api/interpreter",
+        "https://overpass.kumi.systems/api/interpreter",
+      ];
+
+      function normalizeOsmElement(element, latitude, longitude, cityName) {
+        const tags = element.tags || {};
+        const name = tags.name?.trim();
+        const point = element.type === "node" ? element : element.center;
+        const placeLatitude = Number(point?.lat);
+        const placeLongitude = Number(point?.lon);
+        const category = categoryForOsmTags(tags);
+        if (!name || !category || !Number.isFinite(placeLatitude) || !Number.isFinite(placeLongitude)) return null;
+        if (!selectedCategories.includes(category)) return null;
+        const address = [
+          [tags["addr:housenumber"], tags["addr:street"]].filter(Boolean).join(" "),
+          tags["addr:suburb"] || tags["addr:neighbourhood"],
+          tags["addr:postcode"],
+        ].filter(Boolean).join(", ");
+        const osmUrl = `https://www.openstreetmap.org/${element.type}/${element.id}`;
+        return {
+          id: `osm-${element.type}-${element.id}`,
+          name,
+          category,
+          note: `${address || tags.description || cityName}`,
+          description: tags.description || "",
+          address: address || cityName,
+          neighborhood: tags["addr:suburb"] || tags["addr:neighbourhood"] || cityName,
+          latitude: placeLatitude,
+          longitude: placeLongitude,
+          distance: distanceBetweenKilometers(latitude, longitude, placeLatitude, placeLongitude),
+          rating: null,
+          reviewCount: null,
+          priceLevel: null,
+          imageUrl: "",
+          googleMapsUrl: `https://www.google.com/maps/search/?api=1&query=${placeLatitude},${placeLongitude}`,
+          website: tags.website || tags["contact:website"] || "",
+          osmUrl,
+          destination: cityName,
+        };
+      }
+
+      async function fetchOverpassPlaces(latitude, longitude, cityName, radius) {
+        console.log(`Overpass request started: radius=${radius}m`, { latitude, longitude, cityName });
+        const failures = [];
+        for (const endpoint of overpassEndpoints) {
+          try {
+            const response = await fetch(endpoint, {
+              method: "POST",
+              headers: { "Content-Type": "text/plain;charset=UTF-8", Accept: "application/json" },
+              body: overpassQuery(latitude, longitude, radius),
+              signal: AbortSignal.timeout(30000),
+            });
+            console.log(`Overpass HTTP response (${endpoint}): ${response.status}`);
+            if (!response.ok) {
+              failures.push(`${endpoint} HTTP ${response.status}`);
+              continue;
+            }
+            const data = await response.json();
+            const elements = Array.isArray(data.elements) ? data.elements : [];
+            console.log(`Overpass returned ${elements.length} OSM elements`);
+            const placesById = new Map();
+            for (const element of elements) {
+              const place = normalizeOsmElement(element, latitude, longitude, cityName);
+              if (place && !placesById.has(place.id)) placesById.set(place.id, place);
+            }
+            const places = [...placesById.values()].sort((first, second) => first.distance - second.distance);
+            console.log(`Overpass valid places after filtering: ${places.length}`);
+            return places;
+          } catch (error) {
+            failures.push(`${endpoint} ${error.name === "TimeoutError" ? "timeout" : error.message}`);
+          }
+        }
+        throw new Error(`Overpass API unavailable: ${failures.join("; ")}`);
       }
 
       async function loadCityRecommendations(latitude, longitude, cityName, countryName, cityKey, searchId) {
-        const categorySearches = [
-          { query: "historic monument", category: "sight" },
-          { query: "museum", category: "sight" },
-          { query: "tourist attraction", category: "sight" },
-          { query: "food market", category: "food" },
-          { query: "restaurant", category: "restaurant" },
-          { query: "cafe", category: "cafe" },
-          { query: "bar", category: "nightlife" },
-          { query: "nightclub", category: "nightlife" },
-        ];
-        const results = await Promise.all(categorySearches.map(async ({ query, category }) => {
-          try {
-            return (await searchPhotonCategory(query, latitude, longitude)).map((feature) => ({ feature, category }));
-          } catch {
-            return [];
-          }
-        }));
-        if (searchId !== activeSearchId || cityKey !== activeCityKey) return;
-
-        const placesById = new Map();
-        for (const { feature, category } of results.flat()) {
-          const properties = feature.properties || {};
-          const name = properties.name;
-          const coordinates = feature.geometry?.coordinates;
-          if (!name || !Array.isArray(coordinates)) continue;
-          if (["attraction", "cafe", "café", "museum", "restaurant"].includes(name.trim().toLowerCase())) continue;
-          const placeLongitude = Number(coordinates[0]);
-          const placeLatitude = Number(coordinates[1]);
-          const distance = distanceBetweenKilometers(latitude, longitude, placeLatitude, placeLongitude);
-          if (!Number.isFinite(distance) || distance > 30) continue;
-          if (properties.country && countryName && properties.country.toLowerCase() !== countryName.toLowerCase()) continue;
-
-          const placeCategory = categoryForPhotonFeature(properties, category);
-          if (!placeCategory) continue;
-          const id = `${properties.osm_type || "osm"}-${properties.osm_id || `${placeLatitude.toFixed(5)}-${placeLongitude.toFixed(5)}`}`;
-          if (placesById.has(id)) continue;
-          placesById.set(id, {
-            id,
-            name,
-            category: placeCategory,
-            note: `${properties.street ? `${properties.street} · ` : ""}${cityName}`,
-            latitude: placeLatitude,
-            longitude: placeLongitude,
-            distance,
-          });
-        }
-
-        if (cityKey === "athens|gr") {
-          for (const place of athensRecommendations) {
-            if (!placesById.has(place.id)) placesById.set(place.id, { ...place, distance: -1 });
-          }
-        }
-
-        const allPlaces = [...placesById.values()];
-        const selectedPlaces = [];
-        const selectedIds = new Set();
-        const recommendationSections = [
-          { category: "Essential sightseeing", maximum: 15 },
-          { category: "Local food", maximum: 4 },
-          { category: "Traditional restaurant", maximum: 5 },
-          { category: "Café", maximum: 4 },
-          { category: "Nightlife", maximum: 2 },
-        ];
-        for (const section of recommendationSections) {
-          const categoryPlaces = allPlaces.filter((place) => place.category === section.category).sort((first, second) => first.distance - second.distance);
-          for (const place of categoryPlaces.slice(0, section.maximum)) {
-            selectedPlaces.push(place);
-            selectedIds.add(place.id);
-          }
-        }
-        activeCityCards = selectedPlaces.slice(0, 30);
+        recommendationError = "";
+        activeCityCards = [];
         activeCityCardIndex = 0;
-        isLoadingCityCards = false;
+        isLoadingCityCards = true;
         renderCityPlaceCard(searchId);
+        try {
+          let places = await fetchOverpassPlaces(latitude, longitude, cityName, 12000);
+          if (!places.length) {
+            console.warn("No places found within 12 km; retrying Overpass at 25 km.");
+            places = await fetchOverpassPlaces(latitude, longitude, cityName, 25000);
+          }
+          if (searchId !== activeSearchId || cityKey !== activeCityKey) return;
+          activeCityCards = places.slice(0, 40);
+          if (!activeCityCards.length) {
+            recommendationError = "No places found for this destination.";
+            discoveryStatus.textContent = recommendationError;
+          } else {
+            discoveryStatus.textContent = `Found ${activeCityCards.length} places`;
+          }
+        } catch (error) {
+          if (searchId !== activeSearchId || cityKey !== activeCityKey) return;
+          const message = error.name === "TimeoutError" ? "Overpass API timed out while finding local places." : error.message;
+          console.error("Overpass discovery failed:", error);
+          recommendationError = `API ERROR: ${message}`;
+          discoveryStatus.textContent = recommendationError;
+        } finally {
+          if (searchId === activeSearchId && cityKey === activeCityKey) {
+            activeCityCardIndex = 0;
+            isLoadingCityCards = false;
+            console.log(`Cards rendered: ${activeCityCards.length}`);
+            renderCityPlaceCard(searchId);
+          }
+        }
       }
 
       async function loadGlobalCities() {
@@ -1267,6 +1500,25 @@
         }
         return globalCityRecordsPromise;
       }
+
+      locationSearchInput.addEventListener("input", async () => {
+        const query = locationSearchInput.value.trim().toLowerCase();
+        if (query.length < 2) {
+          destinationSuggestions.replaceChildren();
+          return;
+        }
+        try {
+          const cities = await loadGlobalCities();
+          destinationSuggestions.replaceChildren();
+          for (const city of cities.filter((entry) => `${entry.name} ${entry.country}`.toLowerCase().includes(query)).slice(0, 8)) {
+            const option = document.createElement("option");
+            option.value = `${city.name}, ${city.country}`;
+            destinationSuggestions.append(option);
+          }
+        } catch {
+          destinationSuggestions.replaceChildren();
+        }
+      });
 
       async function chooseRandomDestination() {
         randomDestinationButton.disabled = true;
@@ -1301,6 +1553,44 @@
 
       randomDestinationButton.addEventListener("click", chooseRandomDestination);
 
+      function attachCardSwipe(cardElement) {
+        cardElement.addEventListener("pointerdown", (event) => {
+          if (isCardAnimating || event.target.closest("button, a")) return;
+          cardPointerStart = { x: event.clientX, y: event.clientY };
+          cardPointerDelta = 0;
+          cardElement.setPointerCapture(event.pointerId);
+          cardElement.classList.add("is-dragging");
+        });
+        cardElement.addEventListener("pointermove", (event) => {
+          if (!cardPointerStart || isCardAnimating) return;
+          cardPointerDelta = event.clientX - cardPointerStart.x;
+          cardElement.style.transform = `translateX(${cardPointerDelta}px) rotate(${cardPointerDelta * 0.06}deg)`;
+        });
+        cardElement.addEventListener("pointerup", () => {
+          if (!cardPointerStart || isCardAnimating) return;
+          const decision = Math.abs(cardPointerDelta) >= 90 ? (cardPointerDelta > 0 ? "liked" : "disliked") : null;
+          cardPointerStart = null;
+          cardElement.classList.remove("is-dragging");
+          cardElement.style.transform = "";
+          if (decision) queuePlaceDecision(decision);
+        });
+        cardElement.addEventListener("pointercancel", () => {
+          cardPointerStart = null;
+          cardElement.classList.remove("is-dragging");
+          cardElement.style.transform = "";
+        });
+      }
+
+      function queuePlaceDecision(decision) {
+        if (isCardAnimating || !activeCardElement) return;
+        isCardAnimating = true;
+        activeCardElement.classList.add(decision === "liked" ? "swipe-liked" : "swipe-disliked");
+        window.setTimeout(() => {
+          recordPlaceDecision(decision);
+          isCardAnimating = false;
+        }, 280);
+      }
+
       function recordPlaceDecision(decision) {
         const state = getCityFavoriteState(activeCityKey);
         const decidedIds = new Set([...state.liked, ...state.disliked].map((savedPlace) =>
@@ -1312,6 +1602,19 @@
         const targetList = state[decision];
         if (!targetList.some((savedPlace) => (typeof savedPlace === "string" ? savedPlace : savedPlace.id) === card.id)) {
           targetList.push({ id: card.id, name: card.name });
+        }
+        if (decision === "liked" && !wishlistPlaces.some((savedPlace) => savedPlace.id === card.id)) {
+          wishlistPlaces.push({
+            id: card.id,
+            name: card.name,
+            imageUrl: card.imageUrl || placePhotoCache.get(`${activeCityKey}|${card.id}`) || "",
+            category: card.category,
+            destination: card.destination || activeCityName,
+            rating: card.rating,
+            googleMapsUrl: card.googleMapsUrl,
+          });
+          persistWishlist();
+          renderWishlist();
         }
         state[opposingKey] = state[opposingKey].filter((savedPlace) =>
           (typeof savedPlace === "string" ? savedPlace : savedPlace.id) !== card.id
@@ -1325,8 +1628,8 @@
         renderCityPlaceCard();
       }
 
-      placeLikeButton.addEventListener("click", () => recordPlaceDecision("liked"));
-      placeDislikeButton.addEventListener("click", () => recordPlaceDecision("disliked"));
+      placeLikeButton.addEventListener("click", () => queuePlaceDecision("liked"));
+      placeDislikeButton.addEventListener("click", () => queuePlaceDecision("disliked"));
 
       async function geocodeLocation(query) {
         if (geocodeCache.has(query.toLowerCase())) return geocodeCache.get(query.toLowerCase());
