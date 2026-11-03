@@ -1681,61 +1681,6 @@
         ].join("|");
       }
 
-      function normalizePrimaryPlace(place, latitude, longitude, cityName) {
-        const placeLatitude = Number(place.latitude);
-        const placeLongitude = Number(place.longitude);
-        const categoryName = String(place.categories?.[0]?.name || "").toLowerCase();
-        const category = categoryForProviderCategory(categoryName);
-        if (!place.name || !category || !Number.isFinite(placeLatitude) || !Number.isFinite(placeLongitude)) return null;
-        if (!selectedCategories.includes(category)) return null;
-        const address = [
-          place.location?.address,
-          place.location?.locality,
-          place.location?.region,
-          place.location?.postcode,
-        ].filter(Boolean).join(", ");
-        const hoursDisplay = Array.isArray(place.hours?.display)
-          ? place.hours.display.join(", ")
-          : String(place.hours?.display || "");
-        return {
-          id: `primary-${place.fsq_place_id || normalizeCityName(place.name)}`,
-          name: place.name,
-          category,
-          note: address || cityName,
-          description: place.description || "",
-          address: address || cityName,
-          neighborhood: place.location?.locality || cityName,
-          latitude: placeLatitude,
-          longitude: placeLongitude,
-          distance: Number.isFinite(Number(place.distance))
-            ? Number(place.distance) / 1000
-            : distanceBetweenKilometers(latitude, longitude, placeLatitude, placeLongitude),
-          rating: Number.isFinite(Number(place.rating)) ? Number(place.rating) : null,
-          reviewCount: Number.isFinite(Number(place.stats?.total_ratings)) ? Number(place.stats.total_ratings) : null,
-          priceLevel: place.price ? "$".repeat(Math.min(4, Number(place.price))) : null,
-          imageUrl: place.photos?.[0]?.prefix && place.photos[0].suffix
-            ? `${place.photos[0].prefix}1200x900${place.photos[0].suffix}`
-            : "",
-          website: place.website || "",
-          phone: place.tel || "",
-          openingHours: hoursDisplay,
-          isCommercial: ["Food & Restaurants", "Cafes", "Nightlife & Bars", "Shopping"].includes(category),
-          googleMapsUrl: `https://www.google.com/maps/search/?api=1&query=${placeLatitude},${placeLongitude}`,
-          destination: cityName,
-          source: "OpenStreetMap",
-        };
-      }
-
-      function categoryForProviderCategory(categoryName) {
-        if (/restaurant|food|dining|meal|pizza|burger|bakery/.test(categoryName)) return "Food & Restaurants";
-        if (/cafe|coffee|tea|juice/.test(categoryName)) return "Cafes";
-        if (/bar|pub|nightclub|brewery|lounge|cocktail/.test(categoryName)) return "Nightlife & Bars";
-        if (/museum|gallery|culture|histor/.test(categoryName)) return "Museums & Culture";
-        if (/park|garden|outdoor|nature|beach/.test(categoryName)) return "Parks & Nature";
-        if (/shop|store|market|retail|mall|boutique/.test(categoryName)) return "Shopping";
-        if (/attraction|tour|entertainment|theater|theatre|cinema|stadium|activity/.test(categoryName)) return "Activities & Entertainment";
-        return null;
-      }
 
       async function fetchPrimaryPlaces(latitude, longitude, cityName, radius, signal) {
         const response = await fetch("/api/places", {
