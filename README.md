@@ -4,9 +4,9 @@ This is a Three.js globe app with worldwide live place discovery.
 
 ## Place discovery
 
-Destination coordinates come from Nominatim. Place discovery combines an optional server-side Foursquare Places search with OpenStreetMap Overpass results. Results are merged by name and proximity, cached for ten minutes, and never replaced with city-specific fabricated data.
+Destination coordinates come from Nominatim. Place discovery uses OpenStreetMap through the server-side `/api/places` route and public Overpass mirrors. Queries are built from the selected coordinates, radius, and categories; results are cached for ten minutes and are never replaced with fabricated data.
 
-OpenStreetMap works without an API key through multiple public Overpass mirrors. Foursquare adds business photos, ratings, prices, hours, phone numbers, and websites when configured. If one provider fails, the other provider can still supply results. If both fail, the actual error appears in the discovery panel.
+The API tries Overpass servers sequentially, with a timeout, delayed retries, and failover for HTTP 429, 502, 503, and 504 responses. If all servers fail, the discovery panel shows an error and offers a retry. Place cards link to the corresponding OpenStreetMap object and display the required attribution.
 
 ## Local development with Vercel
 
@@ -16,7 +16,6 @@ The `/api/places` endpoint is a Vercel Node.js serverless function. Use Vercel's
 npm install
 npx vercel login
 npx vercel link
-npx vercel env add FOURSQUARE_API_KEY development
 npx vercel dev
 ```
 
@@ -24,21 +23,12 @@ When prompted, use `http://localhost:3000/`. If you prefer a local `.env.local`,
 
 ```sh
 cp .env.example .env.local
-# edit .env.local and set FOURSQUARE_API_KEY
 npx vercel dev
 ```
 
 Do not use `python3 -m http.server` for full local development; it serves `index.html` but returns 404 for `/api/places`.
 
-## Foursquare setup
-
-1. Create a Foursquare Service API Key in the Foursquare Developer Console.
-2. Import this repository into Vercel, or run `npx vercel` from the repository root.
-3. In Vercel Project Settings → Environment Variables, add the Service API Key as `FOURSQUARE_API_KEY` for the required environments.
-4. Redeploy after changing environment variables.
-5. Do not put the key in `index.html`, public environment variables, or committed files.
-
-Foursquare availability, quotas, and pricing depend on the account plan. OpenStreetMap/Overpass remains the no-key fallback, subject to public service usage policies.
+No API key is required for place discovery. The public Overpass services have their own usage policies and availability limits.
 
 ## Deployment verification
 
@@ -50,4 +40,4 @@ curl -i -X POST https://YOUR_DOMAIN/api/places \
   -d '{"latitude":37.9838,"longitude":23.7275,"radius":5000}'
 ```
 
-The response should contain a `places` array. The API key must never appear in the response or browser source. A `503` means the server variable is missing; `502` means the upstream request or credentials failed; `429` means Foursquare rate limiting was reached.
+The response should contain a `places` array and `source: "OpenStreetMap"`. A `502` means all configured Overpass servers failed; retry the request later.

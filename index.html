@@ -281,6 +281,7 @@
         </div>
         <section class="city-places" id="city-places" hidden aria-label="City recommendations">
           <div class="places-heading"><h2>Polaroid picks</h2><span class="places-city" id="places-city"></span></div>
+          <p class="osm-attribution">Place data © <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noreferrer">OpenStreetMap contributors</a></p>
           <div class="polaroid-slot" id="polaroid-slot"></div>
           <div class="saved-section">
             <h2 class="saved-heading">Saved for <span id="saved-city-name">this city</span></h2>
@@ -951,8 +952,7 @@
       let previousRandomCountry = "";
       let lastGeocodeRequest = 0;
       let activeSearchId = 0;
-      let activeOverpassController = null;
-        let activePrimaryController = null;
+      let activePrimaryController = null;
         let activeRecommendationToken = "";
         let activeRadiusMeters = 5000;
         const geocodeCache = new Map();
@@ -1722,7 +1722,7 @@
           isCommercial: ["Food & Restaurants", "Cafes", "Nightlife & Bars", "Shopping"].includes(category),
           googleMapsUrl: `https://www.google.com/maps/search/?api=1&query=${placeLatitude},${placeLongitude}`,
           destination: cityName,
-          source: "Foursquare",
+          source: "OpenStreetMap",
         };
       }
 
@@ -1744,13 +1744,14 @@
           body: JSON.stringify({ latitude, longitude, radius, categories: selectedCategories }),
           signal: AbortSignal.any([signal, AbortSignal.timeout(15000)]),
         });
-        if (response.status === 404 || response.status === 501) throw new Error("Primary places provider is not configured.");
-        if (!response.ok) throw new Error(`Primary places provider returned HTTP ${response.status}.`);
+        if (!response.ok) {
+          const errorBody = await response.json().catch(() => ({}));
+          throw new Error(errorBody.error || `OpenStreetMap discovery returned HTTP ${response.status}.`);
+        }
         const data = await response.json();
-        const places = (Array.isArray(data.places) ? data.places : Array.isArray(data.results) ? data.results : [])
-          .map((place) => normalizePrimaryPlace(place, latitude, longitude, cityName))
+        const places = (Array.isArray(data.places) ? data.places : [])
+          .map((place) => normalizeOsmElement(place, latitude, longitude, cityName))
           .filter(Boolean);
-        if (!places.length) throw new Error("Primary places provider returned no usable places.");
         return places;
       }
 
@@ -1762,7 +1763,6 @@
             distanceBetweenKilometers(existing.latitude, existing.longitude, place.latitude, place.longitude) < 0.15
           );
           if (!nearbyMatch) merged.set(place.id, place);
-          else if (nearbyMatch.source !== "Foursquare" && place.source === "Foursquare") merged.set(nearbyMatch.id, place);
         }
         return [...merged.values()].sort((first, second) => first.distance - second.distance).slice(0, 60);
       }
@@ -1778,8 +1778,7 @@
 
       async function loadCityRecommendations(latitude, longitude, cityName, countryName, cityKey, searchId) {
         const requestToken = `${searchId}|${cityKey}`;
-        if (activeRecommendationToken === requestToken && (activeOverpassController || activePrimaryController)) return;
-        if (activeOverpassController) activeOverpassController.abort();
+        if (activeRecommendationToken === requestToken && activePrimaryController) return;
         if (activePrimaryController) activePrimaryController.abort();
         const cacheKey = discoveryCacheKey(latitude, longitude, activeRadiusMeters);
         const cached = getCachedDiscovery(cacheKey);
@@ -1798,9 +1797,7 @@
           }
           return;
         }
-        const overpassController = new AbortController();
         const primaryController = new AbortController();
-        activeOverpassController = overpassController;
         activePrimaryController = primaryController;
         activeRecommendationToken = requestToken;
         recommendationError = "";
@@ -1810,29 +1807,10 @@
         renderCityPlaceCard(searchId);
 
         const searchPromise = (async () => {
-          let primaryPlaces = [];
-          let osmPlaces = [];
-          const updateProgressively = () => {
-            if (searchId !== activeSearchId || cityKey !== activeCityKey) return;
-            activeCityCards = mergePlaces(primaryPlaces, osmPlaces);
-            if (activeCityCards.length) {
-              isLoadingCityCards = false;
-              discoveryStatus.textContent = `Found ${activeCityCards.length} real places`;
-              renderCityPlaceCard(searchId);
-            }
-          };
-          const providerRequests = [
-            fetchPrimaryPlaces(latitude, longitude, cityName, activeRadiusMeters, primaryController.signal)
-              .then((places) => { primaryPlaces = places; updateProgressively(); return places; }),
-            fetchOverpassPlaces(latitude, longitude, cityName, activeRadiusMeters, overpassController.signal)
-              .then((places) => { osmPlaces = places; updateProgressively(); return places; }),
-          ];
-          const results = await Promise.allSettled(providerRequests);
+          const places = await fetchPrimaryPlaces(latitude, longitude, cityName, activeRadiusMeters, primaryController.signal);
           if (searchId !== activeSearchId || cityKey !== activeCityKey) return [];
-          const places = mergePlaces(primaryPlaces, osmPlaces);
           if (!places.length) {
-            const failures = results.filter((result) => result.status === "rejected").map((result) => result.reason?.message).filter(Boolean);
-            throw new Error(failures.join(" ") || "No real places were found for this destination.");
+            throw new Error("No mapped places were found near this destination. Try a larger radius or another destination.");
           }
           discoveryCache.set(cacheKey, { places, expiresAt: Date.now() + 10 * 60 * 1000 });
           return places;
@@ -1842,7 +1820,7 @@
           activeCityCards = await searchPromise;
           if (searchId === activeSearchId && cityKey === activeCityKey) discoveryStatus.textContent = `Found ${activeCityCards.length} real places`;
         } catch (error) {
-          if (overpassController.signal.aborted || primaryController.signal.aborted) return;
+          if (primaryController.signal.aborted) return;
           if (searchId !== activeSearchId || cityKey !== activeCityKey) return;
           recommendationError = error.message;
           discoveryStatus.textContent = recommendationError;
@@ -1854,7 +1832,6 @@
             isLoadingCityCards = false;
             renderCityPlaceCard(searchId);
           }
-          if (activeOverpassController === overpassController) activeOverpassController = null;
           if (activePrimaryController === primaryController) activePrimaryController = null;
         }
       }
