@@ -1,0 +1,7 @@
+{
+  "name": "orbit-earth-travel-discovery",
+  "private": true,
+  "scripts": {
+    "deploy": "npx vercel --prod"
+  }
+}

@@ -168,6 +168,7 @@
         .category-filter[aria-pressed="true"] { border-color: rgba(158, 213, 206, .72); background: rgba(158, 213, 206, .16); color: var(--accent); }
         .discovery-progress { display: flex; justify-content: space-between; margin-top: 12px; color: var(--muted); font: 10px ui-monospace, monospace; }
         .discovery-status { min-height: 18px; margin-top: 8px; color: var(--accent); font: 10px/1.4 ui-monospace, monospace; }
+        .discovery-toolbar-actions { margin-top: 10px; }
       .panel-rule { height: 1px; margin: 22px 0; border: 0; background: var(--line); }
       .detail-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 14px 10px; }
       .detail-label { display: block; margin-bottom: 5px; color: var(--muted); font: 9px ui-monospace, monospace; letter-spacing: 0.06em; text-transform: uppercase; }
@@ -186,8 +187,9 @@
         .polaroid.swipe-disliked { transform: translate(-130%, -5%) rotate(-18deg); opacity: 0; }
       .polaroid:hover { transform: rotate(0deg) translateY(-2px); }
       .polaroid-image { position: relative; overflow: hidden; aspect-ratio: 1.18; background: #16232b; }
-      .polaroid-image img { display: block; width: 100%; height: 100%; object-fit: cover; }
+      .polaroid-image img { position: relative; z-index: 1; display: block; width: 100%; height: 100%; object-fit: cover; opacity: 1; }
       .polaroid-photo-empty { display: grid; width: 100%; height: 100%; padding: 18px; place-items: center; background: linear-gradient(145deg, #1d3038, #101a20); color: #b6c8ce; font: 10px/1.5 ui-monospace, monospace; text-align: center; }
+      .polaroid-photo-empty.image-fallback-placeholder { position: relative; z-index: 0; background: linear-gradient(145deg, #824f3b, #d39b62); color: #fff7e8; font: 600 12px/1.4 system-ui, sans-serif; text-shadow: 0 1px 2px rgba(0,0,0,.35); }
         .polaroid-photo-empty.is-loading { background: linear-gradient(110deg, #17262d 8%, #243940 18%, #17262d 33%); background-size: 200% 100%; animation: photo-shimmer 1.4s linear infinite; }
         @keyframes photo-shimmer { to { background-position: -200% 0; } }
       .polaroid-photo-empty[hidden] { display: none; }
@@ -263,8 +265,19 @@
         <div class="discovery-toolbar" aria-label="Experience categories">
           <span class="discovery-toolbar-label">Discover by category</span>
           <div class="category-filters" id="category-filters"></div>
+          <label class="discovery-toolbar-label" for="discovery-radius">Search radius</label>
+          <select class="category-filter" id="discovery-radius" aria-label="Search radius">
+            <option value="3000">3 km</option>
+            <option value="5000" selected>5 km</option>
+            <option value="10000">10 km</option>
+            <option value="20000">20 km</option>
+          </select>
           <div class="discovery-progress"><span id="discovery-progress-label">Choose a destination</span><span id="wishlist-shortcut">Wishlist 0</span></div>
           <div class="discovery-status" id="discovery-status" role="status" aria-live="polite">Ready to discover real places.</div>
+          <div class="discovery-actions" id="location-choices" hidden></div>
+          <div class="discovery-actions discovery-toolbar-actions">
+            <button class="discovery-action" id="restart-discovery" type="button" disabled>Restart Discovery</button>
+          </div>
         </div>
         <section class="city-places" id="city-places" hidden aria-label="City recommendations">
           <div class="places-heading"><h2>Polaroid picks</h2><span class="places-city" id="places-city"></span></div>
@@ -863,8 +876,11 @@
       const placesCityLabel = document.querySelector("#places-city");
       const polaroidSlot = document.querySelector("#polaroid-slot");
       const categoryFilters = document.querySelector("#category-filters");
+      const discoveryRadius = document.querySelector("#discovery-radius");
       const discoveryProgressLabel = document.querySelector("#discovery-progress-label");
       const discoveryStatus = document.querySelector("#discovery-status");
+      const locationChoices = document.querySelector("#location-choices");
+      const restartDiscoveryButton = document.querySelector("#restart-discovery");
       const wishlistShortcut = document.querySelector("#wishlist-shortcut");
       const wishlistList = document.querySelector("#wishlist-list");
       const placeActions = document.createElement("div");
@@ -892,8 +908,8 @@
       const categoriesStorageKey = "orbit-earth-categories-v1";
       const worldCitiesUrl = "https://raw.githubusercontent.com/datasets/world-cities/master/data/world-cities.csv";
       const experienceCategories = [
-        "Food & Restaurants", "Coffee & Cafes", "Nightlife & Bars", "Nature & Outdoors",
-        "Activities & Experiences", "Culture & Museums", "Hidden Gems", "Relax & Chill",
+        "Food & Restaurants", "Cafes", "Nightlife & Bars", "Parks & Nature",
+        "Activities & Entertainment", "Museums & Culture", "Shopping",
       ];
       let cityFavorites = {};
       try {
@@ -915,6 +931,7 @@
       let activeCardElement = null;
       let cardPointerStart = null;
       let cardPointerDelta = 0;
+      let decisionAnimationTimer = null;
       let recommendationError = "";
       let wishlistPlaces = [];
       let selectedCategories = experienceCategories.slice();
@@ -922,7 +939,10 @@
         const storedWishlist = JSON.parse(localStorage.getItem(wishlistStorageKey) || "[]");
         wishlistPlaces = Array.isArray(storedWishlist) ? storedWishlist : [];
         const storedCategories = JSON.parse(localStorage.getItem(categoriesStorageKey) || "null");
-        if (Array.isArray(storedCategories) && storedCategories.length) selectedCategories = storedCategories.filter((category) => experienceCategories.includes(category));
+        if (Array.isArray(storedCategories) && storedCategories.length) {
+          const migratedCategories = storedCategories.filter((category) => experienceCategories.includes(category));
+          if (migratedCategories.length) selectedCategories = migratedCategories;
+        }
       } catch {
         wishlistPlaces = [];
       }
@@ -932,10 +952,14 @@
       let lastGeocodeRequest = 0;
       let activeSearchId = 0;
       let activeOverpassController = null;
-      let activeRecommendationToken = "";
-      const geocodeCache = new Map();
-      const placePhotoCache = new Map();
+        let activePrimaryController = null;
+        let activeRecommendationToken = "";
+        let activeRadiusMeters = 5000;
+        const geocodeCache = new Map();
+        const placePhotoCache = new Map();
         const placeImageCandidatesCache = new Map();
+        const discoveryCache = new Map();
+        const discoveryInflight = new Map();
 
       function findCountryForGeocode(result) {
         const polygonMatch = findCountry(Number(result.lon), Number(result.lat));
@@ -989,18 +1013,7 @@
 
       function normalizeCityName(name) {
         const source = String(name || "").trim().normalize("NFKD").replace(/[\u0300-\u036f]/g, "").toLowerCase();
-        const aliases = {
-          "αθηνα": "athens",
-          "αθήνα": "athens",
-          athina: "athens",
-          athena: "athens",
-          athens: "athens",
-          ελλαδα: "greece",
-          ελλάδα: "greece",
-          ellada: "greece",
-          greece: "greece",
-        };
-        return aliases[source] || source.replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "");
+        return source.replace(/[^\p{L}\p{N}]+/gu, "-").replace(/^-|-$/g, "");
       }
 
       function getCityFavoriteState(cityKey) {
@@ -1040,6 +1053,33 @@
 
         fillSavedList(likedPlacesElement, likedCountElement, state.liked, "No saved places yet");
         fillSavedList(dislikedPlacesElement, dislikedCountElement, state.disliked, "No passes yet");
+      }
+
+      function persistCityFavorites() {
+        try {
+          localStorage.setItem(cityFavoritesStorageKey, JSON.stringify(cityFavorites));
+        } catch (error) {
+          console.warn("Could not save city favorites:", error);
+        }
+      }
+
+      function restartDiscovery() {
+        if (!activeCityKey || isLoadingCityCards) return;
+        if (decisionAnimationTimer) {
+          clearTimeout(decisionAnimationTimer);
+          decisionAnimationTimer = null;
+        }
+        const state = getCityFavoriteState(activeCityKey);
+        state.liked = [];
+        state.disliked = [];
+        persistCityFavorites();
+        activeCityCardIndex = 0;
+        isCardAnimating = false;
+        activeCardElement = null;
+        cardPointerStart = null;
+        cardPointerDelta = 0;
+        discoveryStatus.textContent = `Discovery restarted — showing all ${activeCityCards.length} places.`;
+        renderCityPlaceCard();
       }
 
       function persistWishlist() {
@@ -1118,19 +1158,97 @@
 
       renderCategoryFilters();
       renderWishlist();
+      restartDiscoveryButton.addEventListener("click", restartDiscovery);
+      discoveryRadius.addEventListener("change", () => {
+        activeRadiusMeters = Number(discoveryRadius.value);
+        if (!activeDestinationCoordinates) return;
+        const searchId = ++activeSearchId;
+        activeCityCards = [];
+        activeCityCardIndex = 0;
+        isLoadingCityCards = true;
+        renderCityPlaceCard(searchId);
+        void loadCityRecommendations(
+          activeDestinationCoordinates.latitude,
+          activeDestinationCoordinates.longitude,
+          activeCityName,
+          activeCountryName,
+          activeCityKey,
+          searchId,
+        );
+      });
 
       function categoryFallbackImage(category) {
         const colors = {
           "Food & Restaurants": ["#824f3b", "#e4a36a"],
-          "Coffee & Cafes": ["#4d3a31", "#c98e62"],
+          Cafes: ["#4d3a31", "#c98e62"],
           "Nightlife & Bars": ["#302a58", "#bc6aa9"],
-          "Nature & Outdoors": ["#234f4c", "#8abf91"],
-          "Activities & Experiences": ["#31516b", "#d39b62"],
-          "Culture & Museums": ["#5b3e50", "#d69b8d"],
-          "Hidden Gems": ["#3d4d55", "#c0aa6b"],
+          "Parks & Nature": ["#234f4c", "#8abf91"],
+          "Activities & Entertainment": ["#31516b", "#d39b62"],
+          "Museums & Culture": ["#5b3e50", "#d69b8d"],
+          Shopping: ["#3d4d55", "#c0aa6b"],
         }[category] || ["#263c43", "#9ed5ce"];
-        const svg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 900 760"><defs><linearGradient id="g" x1="0" y1="0" x2="1" y2="1"><stop stop-color="${colors[0]}"/><stop offset="1" stop-color="${colors[1]}"/></linearGradient></defs><rect width="900" height="760" fill="url(#g)"/><circle cx="730" cy="150" r="180" fill="rgba(255,255,255,.12)"/><path d="M0 620 Q210 490 420 610 T900 560 V760 H0Z" fill="rgba(0,0,0,.2)"/><text x="52" y="620" fill="white" font-family="monospace" font-size="25" letter-spacing="3">${category.toUpperCase()}</text><text x="52" y="660" fill="rgba(255,255,255,.72)" font-family="sans-serif" font-size="18">Image unavailable · discovery placeholder</text></svg>`;
+        const commercialVisuals = {
+          "Food & Restaurants": '<path d="M170 500h560v90H170zM220 500V280h460v220M290 280v-80M390 280v-80M510 280v-80M610 280v-80" fill="none" stroke="rgba(255,255,255,.72)" stroke-width="18" stroke-linecap="round"/>',
+          Cafes: '<circle cx="450" cy="360" r="125" fill="none" stroke="rgba(255,255,255,.72)" stroke-width="18"/><path d="M575 360h48c82 0 82 120 0 120h-48M350 510h200M450 235V165" fill="none" stroke="rgba(255,255,255,.72)" stroke-width="18" stroke-linecap="round"/>',
+          "Nightlife & Bars": '<path d="M300 190h300M330 190l120 180v170M570 190L450 370M345 540h210M270 590h360" fill="none" stroke="rgba(255,255,255,.72)" stroke-width="18" stroke-linecap="round" stroke-linejoin="round"/>',
+          Shopping: '<path d="M220 540V280h460v260M180 540h540M300 280v-70h300v70M330 370h90v170h-90zM490 370h80v170h-80z" fill="none" stroke="rgba(255,255,255,.72)" stroke-width="18" stroke-linejoin="round"/>',
+        }[category] || '<circle cx="450" cy="350" r="130" fill="none" stroke="rgba(255,255,255,.72)" stroke-width="18"/>';
+        const descriptor = ["Food & Restaurants", "Cafes", "Nightlife & Bars", "Shopping"].includes(category)
+          ? "Generic category illustration · no verified business photo"
+          : "Image unavailable · discovery placeholder";
+        const svg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 900 760"><defs><linearGradient id="g" x1="0" y1="0" x2="1" y2="1"><stop stop-color="${colors[0]}"/><stop offset="1" stop-color="${colors[1]}"/></linearGradient></defs><rect width="900" height="760" fill="url(#g)"/><circle cx="730" cy="150" r="180" fill="rgba(255,255,255,.12)"/>${commercialVisuals}<path d="M0 620 Q210 490 420 610 T900 560 V760 H0Z" fill="rgba(0,0,0,.2)"/><text x="52" y="620" fill="white" font-family="monospace" font-size="25" letter-spacing="3">${category.toUpperCase()}</text><text x="52" y="660" fill="rgba(255,255,255,.72)" font-family="sans-serif" font-size="18">${descriptor}</text></svg>`;
         return `data:image/svg+xml;charset=UTF-8,${encodeURIComponent(svg)}`;
+      }
+
+      const commercialFallbackImages = {
+        "Food & Restaurants": [
+          "https://images.unsplash.com/photo-1517248135467-4c7edcad34c4?auto=format&fit=crop&w=1200&q=85",
+          "https://images.unsplash.com/photo-1504674900247-0877df9cc836?auto=format&fit=crop&w=1200&q=85",
+          "https://images.unsplash.com/photo-1552566626-52f8b828add9?auto=format&fit=crop&w=1200&q=85",
+        ],
+        "Nightlife & Bars": [
+          "https://images.unsplash.com/photo-1515003197210-e0cd71810b5f?auto=format&fit=crop&w=1200&q=85",
+          "https://images.unsplash.com/photo-1572116469696-31de0f17cc34?auto=format&fit=crop&w=1200&q=85",
+        ],
+      };
+
+      function getCommercialFallbackImages(category, card) {
+        const sources = commercialFallbackImages[category];
+        if (!sources) return [categoryFallbackImage(category)];
+        const offset = [...String(card.id || card.name)].reduce((total, character) => total + character.charCodeAt(0), 0) % sources.length;
+        return sources.slice(offset).concat(sources.slice(0, offset));
+      }
+
+      function showImagePlaceholder(card, image, placeholder) {
+        image.removeAttribute("src");
+        image.hidden = true;
+        placeholder.classList.remove("is-loading");
+        placeholder.classList.add("image-fallback-placeholder");
+        const icon = {
+          "Food & Restaurants": "🍽️",
+          Cafes: "☕",
+          "Nightlife & Bars": "🍸",
+          "Parks & Nature": "🌿",
+          "Activities & Entertainment": "✦",
+          "Museums & Culture": "▣",
+          Shopping: "◇",
+        }[card.category] || "✦";
+        placeholder.textContent = `${icon} ${card.category}`;
+        placeholder.hidden = false;
+      }
+
+      function isCommercialPlace(card) {
+        return Boolean(card.isCommercial);
+      }
+
+      function osmImageUrl(value) {
+        const source = String(value || "").trim();
+        if (!source) return "";
+        if (/^https?:\/\//i.test(source)) return source;
+        if (/^(File:)?[^/]+\.[a-z0-9]{2,5}$/i.test(source)) {
+          return `https://commons.wikimedia.org/wiki/Special:FilePath/${encodeURIComponent(source.replace(/^File:/i, ""))}`;
+        }
+        return "";
       }
 
       async function loadWikimediaImageCandidates(card, cacheKey) {
@@ -1138,7 +1256,9 @@
         const candidates = [];
         const queries = [
           card.imageSearchTerms,
-          `${card.name} ${activeCityName} ${activeCountryName}`.trim(),
+          isCommercialPlace(card)
+            ? `"${card.name}" ${activeCityName} ${activeCountryName}`.trim()
+            : `${card.name} ${activeCityName} ${activeCountryName}`.trim(),
         ].filter(Boolean);
         try {
           for (const query of queries) {
@@ -1154,17 +1274,19 @@
               .filter((page) => page.imageinfo?.[0]?.thumburl || page.imageinfo?.[0]?.url)
               .map((page) => {
                 const title = normalizeCityName(page.title.replace(/^File:/, ""));
-                const score = tokens.reduce((total, token) => total + (title.includes(token) ? 1 : 0), 0);
+                const score = tokens.reduce((total, token) => total + (title.includes(token) ? 1 : 0), 0) +
+                  (isCommercialPlace(card) && title.includes(normalizeCityName(activeCityName)) ? 2 : 0);
                 return { score, url: page.imageinfo[0].thumburl || page.imageinfo[0].url };
               })
               .sort((first, second) => second.score - first.score);
             for (const page of pages) {
-              if (!candidates.includes(page.url) && page.score > 0) candidates.push(page.url);
+              const minimumScore = isCommercialPlace(card) ? Math.max(2, Math.min(tokens.length, 2)) : 1;
+              if (!candidates.includes(page.url) && page.score >= minimumScore) candidates.push(page.url);
             }
             if (candidates.length >= 4) break;
           }
 
-          if (candidates.length < 2 && Number.isFinite(card.latitude) && Number.isFinite(card.longitude)) {
+          if (!isCommercialPlace(card) && candidates.length < 2 && Number.isFinite(card.latitude) && Number.isFinite(card.longitude)) {
             const nearbyParams = new URLSearchParams({
               action: "query", format: "json", generator: "geosearch", ggsprimary: "all",
               ggslat: String(card.latitude), ggslon: String(card.longitude), ggsradius: "5000", ggslimit: "8",
@@ -1198,19 +1320,29 @@
 
         const candidates = [];
         if (card.imageUrl) candidates.push(card.imageUrl);
+        if (card.wikimediaCommonsUrl) candidates.push(card.wikimediaCommonsUrl);
         candidates.push(...await loadWikimediaImageCandidates(card, cacheKey));
         const uniqueCandidates = [...new Set(candidates.filter(Boolean))];
         let candidateIndex = 0;
+        const fallbackSources = getCommercialFallbackImages(card.category, card);
+        let fallbackIndex = 0;
         const useCategoryFallback = () => {
-          const fallbackUrl = categoryFallbackImage(card.category);
+          if (fallbackIndex >= fallbackSources.length) {
+            console.warn(`Category fallback images failed for ${card.name}`);
+            showImagePlaceholder(card, image, placeholder);
+            return;
+          }
+          const fallbackUrl = fallbackSources[fallbackIndex];
+          fallbackIndex += 1;
           image.onload = () => {
             placePhotoCache.set(cacheKey, fallbackUrl);
             image.hidden = false;
             placeholder.hidden = true;
             placeholder.classList.remove("is-loading");
+            placeholder.classList.remove("image-fallback-placeholder");
             console.info(`Image fallback loaded for ${card.name}: ${card.category}`);
           };
-          image.onerror = () => console.warn(`All image sources failed for ${card.name}`);
+          image.onerror = () => useCategoryFallback();
           image.src = fallbackUrl;
           console.warn(`Category fallback image used for ${card.name}`);
         };
@@ -1247,6 +1379,7 @@
         ));
         const availableCards = activeCityCards.filter((card) => !decided.has(card.id));
         const card = availableCards[activeCityCardIndex];
+        restartDiscoveryButton.disabled = !activeCityKey || isLoadingCityCards || !activeCityCards.length;
         polaroidSlot.replaceChildren();
         activeCardElement = null;
         console.log(`Cards rendered: ${card ? 1 : 0} (available=${availableCards.length}, total=${activeCityCards.length})`);
@@ -1258,7 +1391,7 @@
           empty.textContent = isLoadingCityCards
             ? `Finding nearby attractions, restaurants, and cafes in ${activeCityName}...`
             : activeCityCards.length
-            ? `You've reviewed all ${activeCityCards.length} picks for ${activeCityName}. Your choices are saved only for this city.`
+            ? `You've discovered all available places in ${activeCityName}. Your choices are saved only for this city.`
             : recommendationError || `No nearby places were found for ${activeCityName}. Try another location.`;
           polaroidSlot.append(empty);
           if (!isLoadingCityCards && !activeCityCards.length) {
@@ -1287,12 +1420,8 @@
             const moreButton = document.createElement("button");
             moreButton.className = "discovery-action";
             moreButton.type = "button";
-            moreButton.textContent = "Discover more";
-            moreButton.addEventListener("click", () => {
-              activeCityCards = activeCityCards.filter((availableCard) => !decided.has(availableCard.id));
-              activeCityCardIndex = 0;
-              renderCityPlaceCard(searchId);
-            });
+            moreButton.textContent = "Explore Again";
+            moreButton.addEventListener("click", restartDiscovery);
             const changeButton = document.createElement("button");
             changeButton.className = "discovery-action";
             changeButton.type = "button";
@@ -1339,8 +1468,10 @@
           card.rating ? `★ ${card.rating}${card.reviewCount ? ` (${card.reviewCount.toLocaleString()})` : ""}` : "No rating",
           card.priceLevel ? card.priceLevel.replace("PRICE_LEVEL_", "").replaceAll("_", " ") : "Price unavailable",
           card.neighborhood || card.address || "Location unavailable",
+          card.source ? `Source: ${card.source}` : "",
         ];
         for (const value of metadata) {
+          if (!value) continue;
           const item = document.createElement("span");
           item.textContent = value;
           meta.append(item);
@@ -1375,8 +1506,7 @@
       function setActiveCityForSearch(result, searchId) {
         const address = result.address || {};
         const locality = address.city || address.town || address.village || address.municipality || address.hamlet || result.name || result.display_name.split(",")[0];
-        const localityAlias = { "greater london": "London", "city of london": "London" }[locality.toLowerCase()];
-        const cityName = localityAlias || locality;
+        const cityName = locality;
         const countryCode = (address.country_code || "").toLowerCase();
         activeCityName = cityName;
         activeCountryName = address.country || "";
@@ -1414,18 +1544,20 @@
         const leisure = tags.leisure;
         const historic = tags.historic;
         const shop = tags.shop;
-        if (amenity === "cafe") return "Coffee & Cafes";
+        const craft = tags.craft;
+        const office = tags.office;
+        if (["museum", "gallery"].includes(tourism) || historic) return "Museums & Culture";
+        if (["park", "garden", "nature_reserve", "golf_course"].includes(leisure) || ["viewpoint", "beach"].includes(tourism)) return "Parks & Nature";
+        if (["attraction", "theme_park", "zoo", "aquarium", "arts_centre"].includes(tourism) || ["sports_centre", "stadium"].includes(leisure)) return "Activities & Entertainment";
+        if (amenity === "cafe") return "Cafes";
         if (["restaurant", "fast_food", "food_court", "marketplace", "biergarten"].includes(amenity) || ["bakery", "deli", "confectionery", "greengrocer", "supermarket"].includes(shop)) return "Food & Restaurants";
         if (["bar", "pub", "nightclub", "music_venue"].includes(amenity)) return "Nightlife & Bars";
-        if (["museum", "gallery"].includes(tourism) || historic) return "Culture & Museums";
-        if (["park", "garden", "nature_reserve", "golf_course"].includes(leisure) || ["viewpoint", "beach"].includes(tourism)) return "Nature & Outdoors";
-        if (["attraction", "theme_park", "zoo", "aquarium", "arts_centre"].includes(tourism) || ["sports_centre", "stadium"].includes(leisure)) return "Activities & Experiences";
-        if (shop) return "Hidden Gems";
+        if (shop || craft || office) return "Shopping";
         return null;
       }
 
       function overpassQuery(latitude, longitude, radius) {
-        return `[out:json][timeout:25];(nwr(around:${radius},${latitude},${longitude})[name][amenity~"restaurant|cafe|bar|pub|nightclub|music_venue|fast_food|food_court|biergarten|marketplace"];nwr(around:${radius},${latitude},${longitude})[name][tourism~"museum|attraction|gallery|viewpoint|theme_park|zoo|aquarium|arts_centre|beach"];nwr(around:${radius},${latitude},${longitude})[name][leisure~"park|garden|nature_reserve|golf_course|sports_centre|stadium|water_park"];nwr(around:${radius},${latitude},${longitude})[name][historic~"archaeological_site|castle|fort|memorial|monument|ruins|wayside_shrine|boundary_stone|manor|palace|city_gate"];nwr(around:${radius},${latitude},${longitude})[name][shop~"bakery|deli|confectionery|greengrocer|supermarket|department_store|gift|books|clothes|craft"];);out center tags;`;
+        return `[out:json][timeout:25];(nwr(around:${radius},${latitude},${longitude})[name][amenity~"restaurant|cafe|bar|pub|nightclub|music_venue|fast_food|food_court|biergarten|marketplace"];nwr(around:${radius},${latitude},${longitude})[name][tourism~"museum|attraction|gallery|viewpoint|theme_park|zoo|aquarium|arts_centre|beach"];nwr(around:${radius},${latitude},${longitude})[name][leisure~"park|garden|nature_reserve|golf_course|sports_centre|stadium|water_park"];nwr(around:${radius},${latitude},${longitude})[name][historic~"archaeological_site|castle|fort|memorial|monument|ruins|wayside_shrine|boundary_stone|manor|palace|city_gate"];nwr(around:${radius},${latitude},${longitude})[name][shop];nwr(around:${radius},${latitude},${longitude})[name][craft];nwr(around:${radius},${latitude},${longitude})[name][office];);out center tags;`;
       }
 
       const overpassEndpoints = [
@@ -1434,58 +1566,6 @@
         "https://overpass.private.coffee/api/interpreter",
         "https://overpass.nchc.org.tw/api/interpreter",
       ];
-
-      const athensFallbackPlaces = [
-        ["Acropolis of Athens", "Activities & Experiences", "Explore the hilltop citadel and its ancient monuments.", 37.9715, 23.7257],
-        ["Parthenon", "Culture & Museums", "The classical temple at the heart of the Acropolis.", 37.9715, 23.7269],
-        ["Acropolis Museum", "Culture & Museums", "Archaeology and sculpture beside the Acropolis.", 37.9684, 23.7285],
-        ["Ancient Agora", "Culture & Museums", "Walk the civic heart of ancient Athens.", 37.9747, 23.7214],
-        ["National Archaeological Museum", "Culture & Museums", "A landmark collection of Greek antiquities.", 37.9891, 23.7326],
-        ["Temple of Olympian Zeus", "Culture & Museums", "Monumental columns from one of Greece's largest ancient temples.", 37.9693, 23.7331],
-        ["Panathenaic Stadium", "Activities & Experiences", "The marble stadium of the first modern Olympic Games.", 37.9683, 23.7411],
-        ["Plaka", "Activities & Experiences", "Wander the old lanes beneath the Acropolis.", 37.9716, 23.7296],
-        ["Monastiraki Square", "Food & Restaurants", "A lively central square beside the flea market.", 37.9763, 23.7257],
-        ["Syntagma Square", "Activities & Experiences", "The city's central square and ceremonial heart.", 37.9755, 23.7348],
-        ["Philopappos Hill", "Nature & Outdoors", "A scenic walking route with Acropolis views.", 37.9655, 23.7211],
-        ["Benaki Museum", "Culture & Museums", "Greek culture and art across centuries.", 37.9755, 23.7417],
-        ["Kerameikos", "Culture & Museums", "Ancient cemetery, city walls, and archaeological museum.", 37.9780, 23.7177],
-        ["ERGON House Agora", "Food & Restaurants", "A modern food hall for Greek produce and regional bites.", 37.9760, 23.7350],
-        ["Feyrouz", "Food & Restaurants", "Eastern Mediterranean street food and filled pies.", 37.9815, 23.7278],
-        ["Taf Coffee", "Coffee & Cafes", "Specialty coffee roasted in Athens.", 37.9859, 23.7350],
-        ["Little Kook", "Coffee & Cafes", "A whimsical, elaborately themed cafe in Psyrri.", 37.9774, 23.7259],
-        ["Brettos Bar", "Nightlife & Bars", "A historic Plaka bar known for its colorful bottle wall.", 37.9694, 23.7285],
-        ["Six d.o.g.s", "Nightlife & Bars", "A courtyard bar and live-music venue in the centre.", 37.9782, 23.7261],
-      ].map(([name, category, note, latitude, longitude]) => ({
-        id: `athens-fallback-${normalizeCityName(name)}`,
-        name,
-        category,
-        note,
-        description: note,
-        address: "Athens, Greece",
-        neighborhood: "Athens",
-        latitude,
-        longitude,
-        distance: distanceBetweenKilometers(37.9838, 23.7275, latitude, longitude),
-        rating: null,
-        reviewCount: null,
-        priceLevel: null,
-        imageUrl: "",
-        googleMapsUrl: `https://www.google.com/maps/search/?api=1&query=${latitude},${longitude}`,
-        osmUrl: `https://www.openstreetmap.org/?mlat=${latitude}&mlon=${longitude}#map=18/${latitude}/${longitude}`,
-        imageSearchTerms: `${name}, Athens, Greece`,
-        destination: "Athens",
-      }));
-
-      function getAthensFallbackPlaces() {
-        const placesById = new Map();
-        for (const place of athensFallbackPlaces) {
-          const valid = place.name && Number.isFinite(place.latitude) && Number.isFinite(place.longitude) && selectedCategories.includes(place.category);
-          if (valid && !placesById.has(place.id)) placesById.set(place.id, place);
-        }
-        const places = [...placesById.values()];
-        console.log(`Athens fallback entries: ${athensFallbackPlaces.length}; valid fallback entries: ${places.length}`);
-        return places;
-      }
 
       function normalizeOsmElement(element, latitude, longitude, cityName) {
         const tags = element.tags || {};
@@ -1496,6 +1576,11 @@
         const category = categoryForOsmTags(tags);
         if (!name || !category || !Number.isFinite(placeLatitude) || !Number.isFinite(placeLongitude)) return null;
         if (!selectedCategories.includes(category)) return null;
+        const hasLandmarkTag = Boolean(tags.historic || tags.tourism || tags.leisure);
+        const isCommercial = !hasLandmarkTag && Boolean(
+          ["restaurant", "cafe", "bar", "pub", "fast_food", "nightclub"].includes(tags.amenity) ||
+          tags.shop || tags.craft || tags.office
+        );
         const address = [
           [tags["addr:housenumber"], tags["addr:street"]].filter(Boolean).join(" "),
           tags["addr:suburb"] || tags["addr:neighbourhood"],
@@ -1516,11 +1601,14 @@
           rating: null,
           reviewCount: null,
           priceLevel: null,
-          imageUrl: "",
+          imageUrl: osmImageUrl(tags.image),
+          wikimediaCommonsUrl: osmImageUrl(tags.wikimedia_commons),
+          isCommercial,
           googleMapsUrl: `https://www.google.com/maps/search/?api=1&query=${placeLatitude},${placeLongitude}`,
           website: tags.website || tags["contact:website"] || "",
           osmUrl,
           destination: cityName,
+          source: "OpenStreetMap",
         };
       }
 
@@ -1584,71 +1672,190 @@
         throw new Error(`Overpass API unavailable: ${failures.join("; ")}`);
       }
 
-      function isAthensDestination(cityName, countryName) {
-        const city = normalizeCityName(cityName || "");
-        const country = normalizeCityName(countryName || "");
-        return city.includes("athens") && (!country || country === "greece");
+      function discoveryCacheKey(latitude, longitude, radius) {
+        return [
+          latitude.toFixed(4),
+          longitude.toFixed(4),
+          radius,
+          [...selectedCategories].sort().join(","),
+        ].join("|");
+      }
+
+      function normalizePrimaryPlace(place, latitude, longitude, cityName) {
+        const placeLatitude = Number(place.latitude);
+        const placeLongitude = Number(place.longitude);
+        const categoryName = String(place.categories?.[0]?.name || "").toLowerCase();
+        const category = categoryForProviderCategory(categoryName);
+        if (!place.name || !category || !Number.isFinite(placeLatitude) || !Number.isFinite(placeLongitude)) return null;
+        if (!selectedCategories.includes(category)) return null;
+        const address = [
+          place.location?.address,
+          place.location?.locality,
+          place.location?.region,
+          place.location?.postcode,
+        ].filter(Boolean).join(", ");
+        const hoursDisplay = Array.isArray(place.hours?.display)
+          ? place.hours.display.join(", ")
+          : String(place.hours?.display || "");
+        return {
+          id: `primary-${place.fsq_place_id || normalizeCityName(place.name)}`,
+          name: place.name,
+          category,
+          note: address || cityName,
+          description: place.description || "",
+          address: address || cityName,
+          neighborhood: place.location?.locality || cityName,
+          latitude: placeLatitude,
+          longitude: placeLongitude,
+          distance: Number.isFinite(Number(place.distance))
+            ? Number(place.distance) / 1000
+            : distanceBetweenKilometers(latitude, longitude, placeLatitude, placeLongitude),
+          rating: Number.isFinite(Number(place.rating)) ? Number(place.rating) : null,
+          reviewCount: Number.isFinite(Number(place.stats?.total_ratings)) ? Number(place.stats.total_ratings) : null,
+          priceLevel: place.price ? "$".repeat(Math.min(4, Number(place.price))) : null,
+          imageUrl: place.photos?.[0]?.prefix && place.photos[0].suffix
+            ? `${place.photos[0].prefix}1200x900${place.photos[0].suffix}`
+            : "",
+          website: place.website || "",
+          phone: place.tel || "",
+          openingHours: hoursDisplay,
+          isCommercial: ["Food & Restaurants", "Cafes", "Nightlife & Bars", "Shopping"].includes(category),
+          googleMapsUrl: `https://www.google.com/maps/search/?api=1&query=${placeLatitude},${placeLongitude}`,
+          destination: cityName,
+          source: "Foursquare",
+        };
+      }
+
+      function categoryForProviderCategory(categoryName) {
+        if (/restaurant|food|dining|meal|pizza|burger|bakery/.test(categoryName)) return "Food & Restaurants";
+        if (/cafe|coffee|tea|juice/.test(categoryName)) return "Cafes";
+        if (/bar|pub|nightclub|brewery|lounge|cocktail/.test(categoryName)) return "Nightlife & Bars";
+        if (/museum|gallery|culture|histor/.test(categoryName)) return "Museums & Culture";
+        if (/park|garden|outdoor|nature|beach/.test(categoryName)) return "Parks & Nature";
+        if (/shop|store|market|retail|mall|boutique/.test(categoryName)) return "Shopping";
+        if (/attraction|tour|entertainment|theater|theatre|cinema|stadium|activity/.test(categoryName)) return "Activities & Entertainment";
+        return null;
+      }
+
+      async function fetchPrimaryPlaces(latitude, longitude, cityName, radius, signal) {
+        const response = await fetch("/api/places", {
+          method: "POST",
+          headers: { "Content-Type": "application/json", Accept: "application/json" },
+          body: JSON.stringify({ latitude, longitude, radius, categories: selectedCategories }),
+          signal: AbortSignal.any([signal, AbortSignal.timeout(15000)]),
+        });
+        if (response.status === 404 || response.status === 501) throw new Error("Primary places provider is not configured.");
+        if (!response.ok) throw new Error(`Primary places provider returned HTTP ${response.status}.`);
+        const data = await response.json();
+        const places = (Array.isArray(data.places) ? data.places : Array.isArray(data.results) ? data.results : [])
+          .map((place) => normalizePrimaryPlace(place, latitude, longitude, cityName))
+          .filter(Boolean);
+        if (!places.length) throw new Error("Primary places provider returned no usable places.");
+        return places;
+      }
+
+      function mergePlaces(primaryPlaces, osmPlaces) {
+        const merged = new Map();
+        for (const place of [...primaryPlaces, ...osmPlaces]) {
+          const nearbyMatch = [...merged.values()].find((existing) =>
+            existing.name.toLowerCase() === place.name.toLowerCase() &&
+            distanceBetweenKilometers(existing.latitude, existing.longitude, place.latitude, place.longitude) < 0.15
+          );
+          if (!nearbyMatch) merged.set(place.id, place);
+          else if (nearbyMatch.source !== "Foursquare" && place.source === "Foursquare") merged.set(nearbyMatch.id, place);
+        }
+        return [...merged.values()].sort((first, second) => first.distance - second.distance).slice(0, 60);
+      }
+
+      function getCachedDiscovery(key) {
+        const cached = discoveryCache.get(key);
+        if (!cached || cached.expiresAt < Date.now()) {
+          discoveryCache.delete(key);
+          return null;
+        }
+        return cached.places;
       }
 
       async function loadCityRecommendations(latitude, longitude, cityName, countryName, cityKey, searchId) {
         const requestToken = `${searchId}|${cityKey}`;
-        if (activeOverpassController && activeRecommendationToken === requestToken) {
-          console.warn("Duplicate place search ignored:", requestToken);
+        if (activeRecommendationToken === requestToken && (activeOverpassController || activePrimaryController)) return;
+        if (activeOverpassController) activeOverpassController.abort();
+        if (activePrimaryController) activePrimaryController.abort();
+        const cacheKey = discoveryCacheKey(latitude, longitude, activeRadiusMeters);
+        const cached = getCachedDiscovery(cacheKey);
+        if (cached) {
+          activeCityCards = cached;
+          isLoadingCityCards = false;
+          discoveryStatus.textContent = `Loaded ${cached.length} cached places`;
+          renderCityPlaceCard(searchId);
           return;
         }
-        if (activeOverpassController) activeOverpassController.abort();
-        const controller = new AbortController();
-        activeOverpassController = controller;
-        activeRecommendationToken = requestToken;
-        const athensDetected = isAthensDestination(cityName, countryName);
-        const fallbackPlaces = athensDetected ? getAthensFallbackPlaces() : [];
-        recommendationError = "";
-        activeCityCards = fallbackPlaces;
-        activeCityCardIndex = 0;
-        isLoadingCityCards = !fallbackPlaces.length;
-        if (fallbackPlaces.length) {
-          discoveryStatus.textContent = "Showing Athens fallback while live search runs.";
-          console.log(`Fallback data is being displayed: ${fallbackPlaces.length} cards`);
+        if (discoveryInflight.has(cacheKey)) {
+          activeCityCards = await discoveryInflight.get(cacheKey);
+          if (searchId === activeSearchId && cityKey === activeCityKey) {
+            isLoadingCityCards = false;
+            renderCityPlaceCard(searchId);
+          }
+          return;
         }
+        const overpassController = new AbortController();
+        const primaryController = new AbortController();
+        activeOverpassController = overpassController;
+        activePrimaryController = primaryController;
+        activeRecommendationToken = requestToken;
+        recommendationError = "";
+        activeCityCards = [];
+        activeCityCardIndex = 0;
+        isLoadingCityCards = true;
         renderCityPlaceCard(searchId);
-        try {
-          let places = await fetchOverpassPlaces(latitude, longitude, cityName, 12000, controller.signal);
+
+        const searchPromise = (async () => {
+          let primaryPlaces = [];
+          let osmPlaces = [];
+          const updateProgressively = () => {
+            if (searchId !== activeSearchId || cityKey !== activeCityKey) return;
+            activeCityCards = mergePlaces(primaryPlaces, osmPlaces);
+            if (activeCityCards.length) {
+              isLoadingCityCards = false;
+              discoveryStatus.textContent = `Found ${activeCityCards.length} real places`;
+              renderCityPlaceCard(searchId);
+            }
+          };
+          const providerRequests = [
+            fetchPrimaryPlaces(latitude, longitude, cityName, activeRadiusMeters, primaryController.signal)
+              .then((places) => { primaryPlaces = places; updateProgressively(); return places; }),
+            fetchOverpassPlaces(latitude, longitude, cityName, activeRadiusMeters, overpassController.signal)
+              .then((places) => { osmPlaces = places; updateProgressively(); return places; }),
+          ];
+          const results = await Promise.allSettled(providerRequests);
+          if (searchId !== activeSearchId || cityKey !== activeCityKey) return [];
+          const places = mergePlaces(primaryPlaces, osmPlaces);
           if (!places.length) {
-            console.warn("No places found within 12 km; retrying Overpass at 25 km.");
-            places = await fetchOverpassPlaces(latitude, longitude, cityName, 25000, controller.signal);
+            const failures = results.filter((result) => result.status === "rejected").map((result) => result.reason?.message).filter(Boolean);
+            throw new Error(failures.join(" ") || "No real places were found for this destination.");
           }
-          if (searchId !== activeSearchId || cityKey !== activeCityKey) return;
-          if (places.length) {
-            activeCityCards = places.slice(0, 40);
-            console.log(`Live data is being displayed: ${activeCityCards.length} cards`);
-          }
-          if (!places.length && !fallbackPlaces.length) {
-            recommendationError = "No places found for this destination.";
-            discoveryStatus.textContent = recommendationError;
-          } else if (places.length) {
-            discoveryStatus.textContent = `Found ${activeCityCards.length} places`;
-          }
+          discoveryCache.set(cacheKey, { places, expiresAt: Date.now() + 10 * 60 * 1000 });
+          return places;
+        })();
+        discoveryInflight.set(cacheKey, searchPromise);
+        try {
+          activeCityCards = await searchPromise;
+          if (searchId === activeSearchId && cityKey === activeCityKey) discoveryStatus.textContent = `Found ${activeCityCards.length} real places`;
         } catch (error) {
-          if (controller.signal.aborted || error.name === "AbortError") return;
+          if (overpassController.signal.aborted || primaryController.signal.aborted) return;
           if (searchId !== activeSearchId || cityKey !== activeCityKey) return;
-          console.error("Overpass discovery failed:", error);
-          if (athensDetected) {
-            activeCityCards = fallbackPlaces.length ? fallbackPlaces : getAthensFallbackPlaces();
-            recommendationError = "Live search is temporarily unavailable. Showing Athens fallback places.";
-            discoveryStatus.textContent = "Fallback places shown (live search unavailable).";
-            console.warn(`Athens fallback used: ${activeCityCards.length} places`);
-          } else {
-            recommendationError = "Live place search is temporarily unavailable. Please retry.";
-            discoveryStatus.textContent = recommendationError;
-          }
+          recommendationError = error.message;
+          discoveryStatus.textContent = recommendationError;
+          activeCityCards = [];
         } finally {
+          discoveryInflight.delete(cacheKey);
           if (searchId === activeSearchId && cityKey === activeCityKey) {
             activeCityCardIndex = 0;
             isLoadingCityCards = false;
-            console.log(`Cards rendered: ${activeCityCards.length}`);
             renderCityPlaceCard(searchId);
           }
-          if (activeOverpassController === controller) activeOverpassController = null;
+          if (activeOverpassController === overpassController) activeOverpassController = null;
+          if (activePrimaryController === primaryController) activePrimaryController = null;
         }
       }
 
@@ -1756,7 +1963,8 @@
         if (isCardAnimating || !activeCardElement) return;
         isCardAnimating = true;
         activeCardElement.classList.add(decision === "liked" ? "swipe-liked" : "swipe-disliked");
-        window.setTimeout(() => {
+        decisionAnimationTimer = window.setTimeout(() => {
+          decisionAnimationTimer = null;
           recordPlaceDecision(decision);
           isCardAnimating = false;
         }, 280);
@@ -1790,11 +1998,7 @@
         state[opposingKey] = state[opposingKey].filter((savedPlace) =>
           (typeof savedPlace === "string" ? savedPlace : savedPlace.id) !== card.id
         );
-        try {
-          localStorage.setItem(cityFavoritesStorageKey, JSON.stringify(cityFavorites));
-        } catch (error) {
-          console.warn("Could not save city favorites:", error);
-        }
+        persistCityFavorites();
         activeCityCardIndex = 0;
         renderCityPlaceCard();
       }
@@ -1811,15 +2015,32 @@
         const url = new URL("https://nominatim.openstreetmap.org/search");
         url.searchParams.set("q", query);
         url.searchParams.set("format", "jsonv2");
-        url.searchParams.set("limit", "1");
+        url.searchParams.set("limit", "5");
         url.searchParams.set("addressdetails", "1");
         url.searchParams.set("extratags", "1");
         const response = await fetch(url, { headers: { "Accept-Language": navigator.language || "en" } });
         if (!response.ok) throw new Error("The location search is temporarily unavailable.");
         const results = await response.json();
         if (!results.length) throw new Error("No matching place found. Try a city or country name.");
-        geocodeCache.set(query.toLowerCase(), results[0]);
-        return results[0];
+        geocodeCache.set(query.toLowerCase(), results);
+        return results;
+      }
+
+      function startLocationDiscovery(result, searchId) {
+        const latitude = Number(result.lat);
+        const longitude = Number(result.lon);
+        const country = findCountryForGeocode(result);
+        const locationName = result.name || result.display_name.split(",")[0];
+        const countryName = result.address?.country || "";
+        locationChoices.hidden = true;
+        locationChoices.replaceChildren();
+        panelKicker.textContent = countryName || "Geographic search";
+        panelTitle.textContent = locationName;
+        panelSubtitle.textContent = result.display_name;
+        addLocationDetails(result);
+        const cityContext = setActiveCityForSearch(result, searchId);
+        focusLocation(latitude, longitude, country, locationName);
+        void loadCityRecommendations(latitude, longitude, cityContext.cityName, countryName, cityContext.cityKey, searchId);
       }
 
       locationSearchForm.addEventListener("submit", async (event) => {
@@ -1836,23 +2057,30 @@
         panelTitle.textContent = query;
         panelSubtitle.textContent = "Finding coordinates and local highlights...";
         locationDetails.hidden = true;
+        locationChoices.hidden = true;
+        locationChoices.replaceChildren();
 
         try {
-          const result = await geocodeLocation(query);
+          const results = await geocodeLocation(query);
           if (searchId !== activeSearchId) return;
+          if (results.length > 1) {
+            discoveryStatus.textContent = "Choose the matching city and country:";
+            for (const result of results) {
+              const choice = document.createElement("button");
+              choice.className = "discovery-action";
+              choice.type = "button";
+              choice.textContent = result.display_name;
+              choice.addEventListener("click", () => {
+                const choiceSearchId = ++activeSearchId;
+                void countryDataPromise.then(() => startLocationDiscovery(result, choiceSearchId));
+              });
+              locationChoices.append(choice);
+            }
+            locationChoices.hidden = false;
+            return;
+          }
           await countryDataPromise;
-          const latitude = Number(result.lat);
-          const longitude = Number(result.lon);
-          const country = findCountryForGeocode(result);
-          const locationName = result.name || result.display_name.split(",")[0];
-          const countryName = result.address?.country || "";
-          panelKicker.textContent = countryName || "Geographic search";
-          panelTitle.textContent = locationName;
-          panelSubtitle.textContent = result.display_name;
-          addLocationDetails(result);
-          const cityContext = setActiveCityForSearch(result, searchId);
-          focusLocation(latitude, longitude, country, locationName);
-          void loadCityRecommendations(latitude, longitude, cityContext.cityName, countryName, cityContext.cityKey, searchId);
+          startLocationDiscovery(results[0], searchId);
         } catch (error) {
           if (searchId === activeSearchId) {
             panelKicker.textContent = "Search unavailable";
